@@ -1,0 +1,364 @@
+/* =========================================================================
+   VisionFlywheel Design Tokens
+   参考：NN/g 10 大启发式 + Material 3 + Linear/Vercel/Stripe 设计语言
+   原则：极简（信号>噪音）· 一致 · 可访问 · 有意义的动效
+   ========================================================================= */
+
+:root {
+  /* ---------- 色彩：中性 + 主色 + 语义 ---------- */
+  /* 中性（不要纯黑纯白） */
+  --c-neutral-0:   #ffffff;
+  --c-neutral-50:  #fafbfc;
+  --c-neutral-100: #f4f6f8;
+  --c-neutral-200: #e8ecf0;
+  --c-neutral-300: #d5dce3;
+  --c-neutral-400: #a8b4c0;
+  --c-neutral-500: #7d8b99;
+  --c-neutral-600: #5a6874;
+  --c-neutral-700: #3d4750;
+  --c-neutral-800: #242c34;
+  --c-neutral-900: #13181d;
+
+  /* 主色 Indigo */
+  --c-primary-50:  #eef2ff;
+  --c-primary-100: #e0e7ff;
+  --c-primary-200: #c7d2fe;
+  --c-primary-300: #a5b4fc;
+  --c-primary-400: #818cf8;
+  --c-primary-500: #6366f1;
+  --c-primary-600: #4f46e5;
+  --c-primary-700: #4338ca;
+  --c-primary-800: #3730a3;
+
+  /* 语义色 */
+  --c-success-50:  #ecfdf5;
+  --c-success-500: #10b981;
+  --c-success-600: #059669;
+  --c-warning-50:  #fffbeb;
+  --c-warning-500: #f59e0b;
+  --c-warning-600: #d97706;
+  --c-danger-50:   #fef2f2;
+  --c-danger-500:  #ef4444;
+  --c-danger-600:  #dc2626;
+  --c-info-50:     #eff6ff;
+  --c-info-500:    #3b82f6;
+
+  /* ---------- 语义别名（业务层用这些） ---------- */
+  --bg-app:        var(--c-neutral-50);
+  --bg-surface:    var(--c-neutral-0);
+  --bg-subtle:     var(--c-neutral-100);
+  --bg-hover:      var(--c-neutral-100);
+  --bg-active:     var(--c-neutral-200);
+  --bg-inverse:    var(--c-neutral-900);
+
+  --text-primary:    var(--c-neutral-900);
+  --text-secondary:  var(--c-neutral-600);
+  --text-tertiary:   var(--c-neutral-500);
+  --text-disabled:   var(--c-neutral-400);
+  --text-on-accent:  var(--c-neutral-0);
+  --text-accent:     var(--c-primary-600);
+
+  --border-default: var(--c-neutral-200);
+  --border-strong:  var(--c-neutral-300);
+  --border-accent:  var(--c-primary-300);
+  --border-focus:   var(--c-primary-500);
+
+  /* ---------- 字体 ---------- */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'PingFang SC',
+               'Microsoft YaHei', 'Segoe UI', sans-serif;
+  --font-mono: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+  --font-num: 'SF Mono', 'Cascadia Code', Consolas, 'Inter', monospace;
+
+  /* 字号（4pt 网格） */
+  --fs-xs:    11px;
+  --fs-sm:    12px;
+  --fs-base:  13px;
+  --fs-md:    14px;
+  --fs-lg:    16px;
+  --fs-xl:    20px;
+  --fs-2xl:   24px;
+  --fs-3xl:   32px;
+  --fs-4xl:   48px;
+
+  --lh-tight:   1.25;
+  --lh-normal:  1.55;
+  --lh-relaxed: 1.7;
+
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
+  /* ---------- 间距（4pt 网格） ---------- */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-5:  20px;
+  --sp-6:  24px;
+  --sp-8:  32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* ---------- 圆角 ---------- */
+  --r-xs:   4px;
+  --r-sm:   6px;
+  --r-md:   8px;
+  --r-lg:   12px;
+  --r-xl:   16px;
+  --r-full: 9999px;
+
+  /* ---------- 阴影（3 级 elevation） ---------- */
+  --shadow-none: 0 0 0 1px var(--c-neutral-200);
+  --shadow-sm:   0 1px 2px 0 rgb(15 23 42 / 0.05),
+                 0 1px 3px 0 rgb(15 23 42 / 0.06);
+  --shadow-md:   0 4px 6px -1px rgb(15 23 42 / 0.08),
+                 0 2px 4px -2px rgb(15 23 42 / 0.05);
+  --shadow-lg:   0 12px 20px -6px rgb(15 23 42 / 0.12),
+                 0 4px 8px -4px rgb(15 23 42 / 0.05);
+  --shadow-focus: 0 0 0 3px var(--c-primary-100);
+
+  /* ---------- 动效（三档） ---------- */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasis: cubic-bezier(0.3, 0, 0, 1);
+  --ease-decelerate: cubic-bezier(0, 0, 0, 1);
+
+  --t-instant: 100ms;
+  --t-fast:    150ms;
+  --t-base:    250ms;
+  --t-slow:    350ms;
+  --t-slower:  500ms;
+
+  /* ---------- 层级 ---------- */
+  --z-sticky:  100;
+  --z-drawer:  1100;
+  --z-dropdown: 1200;
+  --z-modal:   1300;
+  --z-toast:   1400;
+
+  /* ---------- 布局 ---------- */
+  --layout-sidebar-w: 240px;
+  --layout-sidebar-w-collapsed: 64px;
+  --layout-header-h: 56px;
+  --layout-content-max: 1320px;
+
+  /* ---------- Element Plus 覆写（保持一致） ---------- */
+  --el-color-primary: var(--c-primary-600);
+  --el-color-primary-light-3: var(--c-primary-300);
+  --el-color-primary-light-5: var(--c-primary-200);
+  --el-color-primary-light-7: var(--c-primary-100);
+  --el-color-primary-light-8: var(--c-primary-50);
+  --el-color-primary-dark-2: var(--c-primary-700);
+  --el-color-success: var(--c-success-500);
+  --el-color-warning: var(--c-warning-500);
+  --el-color-danger:  var(--c-danger-500);
+  --el-color-info:    var(--c-info-500);
+
+  --el-border-radius-base: var(--r-sm);
+  --el-font-size-base: var(--fs-md);
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-secondary);
+  --el-text-color-secondary: var(--text-tertiary);
+  --el-border-color: var(--border-default);
+  --el-border-color-lighter: var(--border-default);
+  --el-fill-color-blank: var(--bg-surface);
+  --el-bg-color-page: var(--bg-app);
+}
+
+/* 深色模式（供未来扩展，暂未启用） */
+[data-theme='dark'] {
+  --bg-app: var(--c-neutral-900);
+  --bg-surface: var(--c-neutral-800);
+  --bg-subtle: var(--c-neutral-700);
+  --text-primary: var(--c-neutral-50);
+  --text-secondary: var(--c-neutral-300);
+  --text-tertiary: var(--c-neutral-400);
+  --border-default: var(--c-neutral-700);
+}
+
+/* =========================================================================
+   全局 Reset
+   ========================================================================= */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  line-height: var(--lh-normal);
+  color: var(--text-primary);
+  background: var(--bg-app);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  line-height: var(--lh-tight);
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+}
+h1 { font-size: var(--fs-3xl); letter-spacing: -0.02em; }
+h2 { font-size: var(--fs-2xl); letter-spacing: -0.015em; }
+h3 { font-size: var(--fs-xl); letter-spacing: -0.01em; }
+h4 { font-size: var(--fs-lg); }
+
+p { margin: 0; }
+
+a {
+  color: var(--text-accent);
+  text-decoration: none;
+  transition: color var(--t-fast) var(--ease-standard);
+}
+a:hover { color: var(--c-primary-700); }
+
+code, pre, .mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+img, svg { display: block; max-width: 100%; }
+
+button, input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+/* 通用容器 */
+.page {
+  padding: var(--sp-6) var(--sp-8);
+  max-width: var(--layout-content-max);
+  margin: 0 auto;
+  animation: page-fade-in var(--t-base) var(--ease-decelerate);
+}
+
+@keyframes page-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes count-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 通用工具类 */
+.text-sm   { font-size: var(--fs-sm); }
+.text-base { font-size: var(--fs-base); }
+.text-md   { font-size: var(--fs-md); }
+.text-lg   { font-size: var(--fs-lg); }
+.text-xl   { font-size: var(--fs-xl); }
+.text-2xl  { font-size: var(--fs-2xl); }
+.text-3xl  { font-size: var(--fs-3xl); }
+
+.text-muted    { color: var(--text-secondary); }
+.text-subtle   { color: var(--text-tertiary); }
+.text-accent   { color: var(--text-accent); }
+.text-success  { color: var(--c-success-600); }
+.text-warning  { color: var(--c-warning-600); }
+.text-danger   { color: var(--c-danger-600); }
+
+.mono  { font-family: var(--font-mono); }
+.num   { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+.flex       { display: flex; }
+.flex-col   { flex-direction: column; }
+.items-center   { align-items: center; }
+.items-start    { align-items: flex-start; }
+.items-baseline { align-items: baseline; }
+.items-end      { align-items: flex-end; }
+.justify-between { justify-content: space-between; }
+.justify-center  { justify-content: center; }
+.justify-end     { justify-content: flex-end; }
+.flex-wrap  { flex-wrap: wrap; }
+.flex-1     { flex: 1; min-width: 0; }
+.shrink-0   { flex-shrink: 0; }
+
+.gap-1 { gap: var(--sp-1); }
+.gap-2 { gap: var(--sp-2); }
+.gap-3 { gap: var(--sp-3); }
+.gap-4 { gap: var(--sp-4); }
+.gap-6 { gap: var(--sp-6); }
+.gap-8 { gap: var(--sp-8); }
+
+.grid { display: grid; }
+
+/* 卡片基础 */
+.surface {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-lg);
+}
+
+/* 焦点可见 */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+/* 滚动条（统一风格） */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--c-neutral-300);
+  border-radius: var(--r-full);
+  border: 2px solid var(--bg-app);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--c-neutral-400); }
+
+/* 选中态 */
+::selection {
+  background: var(--c-primary-100);
+  color: var(--c-primary-800);
+}
+
+/* 减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

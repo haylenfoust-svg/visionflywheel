@@ -6,7 +6,7 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 
 import App from './App.vue'
 import router from './router'
-import '@/styles/tokens.scss'
+import '@/styles/design-system.scss'
 
 const app = createApp(App)
 app.use(createPinia())
