@@ -294,13 +294,13 @@ onMounted(refresh)
             <el-table-column prop="created_at" label="创建时间" width="180" />
             <el-table-column label="操作" width="180">
               <template #default="{ row }">
-                <el-button size="small" text type="primary" @click="openEditUser(row)">编辑</el-button>
+                <el-button size="small" text type="primary" @click="openEditUser(row as User)">编辑</el-button>
                 <el-button
                   size="small"
                   text
                   :type="row.is_active ? 'danger' : 'success'"
                   :disabled="row.id === auth.user?.id"
-                  @click="toggleUser(row)"
+                  @click="toggleUser(row as User)"
                 >
                   {{ row.is_active ? '禁用' : '启用' }}
                 </el-button>
@@ -427,9 +427,9 @@ onMounted(refresh)
             <el-table-column prop="reply" label="回复" min-width="200" />
             <el-table-column label="操作" width="220">
               <template #default="{ row }">
-                <el-button v-if="can('feedback.manage')" size="small" text type="primary" @click="replyTicket(row)">回复</el-button>
-                <el-button v-if="can('feedback.manage')" size="small" text type="success" @click="setStatus(row, 'resolved')">解决</el-button>
-                <el-button v-if="can('feedback.manage')" size="small" text type="danger" @click="setStatus(row, 'rejected')">驳回</el-button>
+                <el-button v-if="can('feedback.manage')" size="small" text type="primary" @click="replyTicket(row as Feedback)">回复</el-button>
+                <el-button v-if="can('feedback.manage')" size="small" text type="success" @click="setStatus(row as Feedback, 'resolved')">解决</el-button>
+                <el-button v-if="can('feedback.manage')" size="small" text type="danger" @click="setStatus(row as Feedback, 'rejected')">驳回</el-button>
               </template>
             </el-table-column>
           </el-table>

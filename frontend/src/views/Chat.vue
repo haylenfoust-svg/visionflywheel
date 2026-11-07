@@ -162,7 +162,7 @@ onMounted(() => {
                     <span class="chip chip-primary">{{ intentLabel[m.intent] ?? m.intent }}</span>
                     <span v-if="m.checked === false" class="chip chip-warning">⚠ 数字待核对</span>
                     <span v-else-if="m.checked" class="chip chip-success">✓ 已对照统计</span>
-                    <button v-if="can('chat.knowledge.write')" class="save-btn" @click="saveToKnowledge(m)">✦ 存入知识库</button>
+                    <button v-if="can('chat.knowledge.write')" class="save-btn" @click="saveToKnowledge(m as ChatMessage)">✦ 存入知识库</button>
                   </div>
                 </div>
               </div>
@@ -185,7 +185,7 @@ onMounted(() => {
                 :key="s"
                 class="suggest"
                 :disabled="loading"
-                @click="send(s)"
+                @click="send(s as any)"
               >
                 {{ s }}
               </button>
@@ -224,7 +224,7 @@ onMounted(() => {
             <el-table-column prop="source" label="来源" width="120" />
             <el-table-column v-if="auth.isAdmin" label="操作" width="100">
               <template #default="{ row }">
-                <el-button size="small" text type="danger" @click="onDeleteKnowledge(row)">删除</el-button>
+                <el-button size="small" text type="danger" @click="onDeleteKnowledge(row as KnowledgeEntry)">删除</el-button>
               </template>
             </el-table-column>
           </el-table>

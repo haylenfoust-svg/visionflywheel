@@ -71,7 +71,13 @@ def _hash_vector(text: str, dim: int = 64) -> list[float]:
     return [v / norm for v in vec]
 
 
-def add_knowledge(question: str, answer: str, source: str = "manual") -> dict:
+def add_knowledge(question: str, answer: str, source: str = "manual", *, skip_safety: bool = False) -> dict:
+    if not skip_safety:
+        from app.services.compliance_service import screen_content
+        verdict = screen_content(question + " " + answer)
+        if not verdict["safe"]:
+            from app.core.exceptions import AppError, Err
+            raise AppError(Err.VALIDATION, f"content rejected: {verdict.get("reason", "safety check failed")}", 400)
     entry = KnowledgeEntry(
         id=len(_KNOWLEDGE) + 1,
         question=question.strip(),

@@ -345,7 +345,7 @@ onMounted(refresh)
             <el-table-column label="类别" min-width="200">
               <template #default="{ row }">
                 <div class="chip-list">
-                  <span v-for="c in classList(row)" :key="c" class="chip chip-primary">{{ c }}</span>
+                  <span v-for="c in classList(row as DatasetExportRow)" :key="c" class="chip chip-primary">{{ c }}</span>
                 </div>
               </template>
             </el-table-column>
@@ -357,7 +357,7 @@ onMounted(refresh)
             <el-table-column prop="created_at" label="时间" width="180" />
             <el-table-column label="操作" width="130">
               <template #default="{ row }">
-                <el-button v-if="can('dataset.read')" size="small" text type="primary" @click="onDownload(row)">下载 zip</el-button>
+                <el-button v-if="can('dataset.read')" size="small" text type="primary" @click="onDownload(row as DatasetExportRow)">下载 zip</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -436,10 +436,10 @@ onMounted(refresh)
             </el-table-column>
             <el-table-column label="操作" width="200">
               <template #default="{ row }">
-                <el-button v-if="can('weight.switch')" size="small" text type="primary" :disabled="row.is_default" @click="onSetDefault(row)">
+                <el-button v-if="can('weight.switch')" size="small" text type="primary" :disabled="row.is_default" @click="onSetDefault(row as Weight)">
                   切换为默认
                 </el-button>
-                <el-button v-if="can('weight.delete')" size="small" text type="danger" :disabled="row.is_default" @click="onDeleteWeight(row)">
+                <el-button v-if="can('weight.delete')" size="small" text type="danger" :disabled="row.is_default" @click="onDeleteWeight(row as Weight)">
                   删除
                 </el-button>
               </template>
@@ -535,11 +535,11 @@ onMounted(refresh)
                   text
                   type="warning"
                   :disabled="!['pending', 'running'].includes(row.status)"
-                  @click="onCancelRun(row)"
+                  @click="onCancelRun(row as TrainRun)"
                 >
                   取消
                 </el-button>
-                <el-button size="small" text type="primary" @click="pollRun(row)">刷新</el-button>
+                <el-button size="small" text type="primary" @click="pollRun(row as TrainRun)">刷新</el-button>
               </template>
             </el-table-column>
           </el-table>

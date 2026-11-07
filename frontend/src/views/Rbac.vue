@@ -580,7 +580,7 @@ onMounted(refresh)
             <el-table-column label="操作" width="180">
               <template #default="{ row }">
                 <el-button size="small" text type="primary" @click="openCreateOrg">编辑</el-button>
-                <el-button size="small" text type="danger" @click="onDeleteOrg(row)">删除</el-button>
+                <el-button size="small" text type="danger" @click="onDeleteOrg(row as Organization)">删除</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -606,8 +606,8 @@ onMounted(refresh)
             <el-table-column prop="member_count" label="成员" width="90" align="right" />
             <el-table-column label="操作" width="220">
               <template #default="{ row }">
-                <el-button size="small" text type="primary" @click="viewTeamMembers(row)">成员</el-button>
-                <el-button size="small" text type="primary" @click="onAddTeamMember(row)">添加</el-button>
+                <el-button size="small" text type="primary" @click="viewTeamMembers(row as Team)">成员</el-button>
+                <el-button size="small" text type="primary" @click="onAddTeamMember(row as Team)">添加</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -626,7 +626,7 @@ onMounted(refresh)
                 </el-table-column>
                 <el-table-column label="操作" width="100">
                   <template #default="{ row }">
-                    <el-button size="small" text type="danger" @click="onRemoveTeamMember(t, row)">移出</el-button>
+                    <el-button size="small" text type="danger" @click="onRemoveTeamMember(t, row as TeamMember)">移出</el-button>
                   </template>
                 </el-table-column>
               </el-table>
@@ -656,7 +656,7 @@ onMounted(refresh)
             </el-table-column>
             <el-table-column label="操作" width="120">
               <template #default="{ row }">
-                <el-button v-if="can('session.revoke')" size="small" text type="danger" :disabled="!row.is_active" @click="onRevoke(row)">
+                <el-button v-if="can('session.revoke')" size="small" text type="danger" :disabled="!row.is_active" @click="onRevoke(row as Session)">
                   强制下线
                 </el-button>
               </template>
@@ -683,7 +683,7 @@ onMounted(refresh)
             </el-table-column>
             <el-table-column label="操作" width="120">
               <template #default="{ row }">
-                <el-button v-if="can('session.revoke')" size="small" text type="danger" :disabled="!row.is_active" @click="onRevoke(row)">
+                <el-button v-if="can('session.revoke')" size="small" text type="danger" :disabled="!row.is_active" @click="onRevoke(row as Session)">
                   强制下线
                 </el-button>
               </template>

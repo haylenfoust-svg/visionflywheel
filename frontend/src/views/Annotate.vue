@@ -471,9 +471,9 @@ v-if="can('detection.correct')" type="warning" plain size="large" :loading="undo
             <el-table-column prop="reply" label="回复" min-width="200" />
             <el-table-column v-if="auth.isAdmin" label="操作" width="220">
               <template #default="{ row }">
-                <el-button size="small" text type="primary" @click="onReply(row)">回复</el-button>
-                <el-button size="small" text type="success" @click="onStatusChange(row, 'resolved')">解决</el-button>
-                <el-button size="small" text type="danger" @click="onStatusChange(row, 'rejected')">驳回</el-button>
+                <el-button size="small" text type="primary" @click="onReply(row as any)">回复</el-button>
+                <el-button size="small" text type="success" @click="onStatusChange(row as Feedback, 'resolved')">解决</el-button>
+                <el-button size="small" text type="danger" @click="onStatusChange(row as Feedback, 'rejected')">驳回</el-button>
               </template>
             </el-table-column>
           </el-table>
