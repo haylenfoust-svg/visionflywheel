@@ -28,6 +28,9 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import AppError, Err
 from app.core.security import hash_password
 from app.models.user import User
+from app.services.oauth_service import OAuthService  # noqa: F401
+
+__all__ = ["OAuthService", "TwoFactorService", "PasswordResetService"]
 
 logger = logging.getLogger(__name__)
 
@@ -143,11 +146,13 @@ class TwoFactorService:
 
 
 class PasswordResetService:
-    """Token-based password reset."""
+    """Token-based password reset — email delivery (P1.1)."""
 
     @staticmethod
     def request_reset(db: Session, username: str) -> dict[str, Any]:
-        """Issue a reset token. In production, this would be emailed."""
+        """Issue a reset token and email it to the user."""
+        from app.services.email_service import send_password_reset
+
         user = db.query(User).filter(User.username == username).first()
         if user is None:
             # Don't reveal whether the username exists
@@ -156,11 +161,25 @@ class PasswordResetService:
         user.reset_token_hash = token_hash
         user.reset_token_expires_at = expires_at
         db.commit()
-        # In production: send email. Here we surface it to the admin for testing.
+
+        # Best-effort email delivery; always surface the token for admin handoff
+        delivery: dict[str, Any] = {}
+        recipient = getattr(user, "email", None) or f"{user.username}@localhost"
+        try:
+            delivery = send_password_reset(
+                recipient,
+                token,
+                username=user.username,
+                expires_minutes=RESET_TOKEN_TTL_MINUTES,
+            )
+        except Exception as exc:  # pragma: no cover
+            delivery = {"status": "error", "error": str(exc)}
+
         return {
             "issued": True,
-            "token": token,  # REMOVE in production — only for admin handoff
+            "token": token,  # admin handoff / test mode
             "expires_in_minutes": RESET_TOKEN_TTL_MINUTES,
+            "delivery": delivery,
         }
 
     @staticmethod
@@ -185,35 +204,6 @@ class PasswordResetService:
         return {"reset": True}
 
 
-# ---- OAuth / SSO placeholder ----
-class OAuthService:
-    """Reserved for future Google / GitHub / SAML integration.
-
-    The architecture is wired: each provider gets a `connect` and `callback`
-    route. Currently every route raises a clear "not configured" error so
-    the shape is in place without pretending to work.
-    """
-
-    SUPPORTED_PROVIDERS = ("google", "github", "saml")
-
-    @staticmethod
-    def authorize_url(provider: str) -> str:
-        if provider not in OAuthService.SUPPORTED_PROVIDERS:
-            raise AppError(Err.VALIDATION, f"unsupported provider: {provider}", 400)
-        raise AppError(
-            Err.NOT_FOUND,
-            f"OAuth provider '{provider}' is not configured. "
-            f"Set the corresponding client ID/secret in .env to enable.",
-            501,
-        )
-
-    @staticmethod
-    def handle_callback(provider: str, code: str) -> dict[str, Any]:
-        del code  # reserved for future OAuth exchange
-        if provider not in OAuthService.SUPPORTED_PROVIDERS:
-            raise AppError(Err.VALIDATION, f"unsupported provider: {provider}", 400)
-        raise AppError(
-            Err.NOT_FOUND,
-            f"OAuth provider '{provider}' is not configured.",
-            501,
-        )
+# ---- OAuth / SSO ----------
+# Real implementation lives in app.services.oauth_service; this is a
+# thin re-export so callers don't have to change their imports.

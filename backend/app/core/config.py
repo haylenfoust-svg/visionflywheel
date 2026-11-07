@@ -50,6 +50,30 @@ class Settings(BaseSettings):
     llm_model: str = "Qwen/Qwen2.5-0.5B-Instruct"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 
+    # ---- Email / SMTP (P1.1) ----
+    smtp_host: str = ""  # empty = test transport (writes runtime_data/outbox/)
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "noreply@visionflywheel.local"
+    smtp_tls: bool = True
+    smtp_ssl: bool = False
+
+    # ---- OAuth / SSO (P1.2) ----
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    github_client_id: str = ""
+    github_client_secret: str = ""
+    saml_entity_id: str = ""
+    saml_sso_url: str = ""
+    saml_x509_cert: str = ""
+
+    # ---- Observability (P1.5) ----
+    alert_email: str = ""
+    alert_webhook_url: str = ""
+    log_level: str = "INFO"
+    require_password_change: bool = False  # force password-change-on-first-login
+
 
 @lru_cache
 def get_settings() -> Settings:
