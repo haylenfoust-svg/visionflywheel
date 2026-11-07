@@ -1,0 +1,92 @@
+# VisionFlywheel Python 工具链统一配置
+# 工具：ruff（lint + format）· pyright（type check）· pytest（测试）
+
+[project]
+name = "visionflywheel"
+version = "0.1.0"
+description = "以 YOLO 为核心、人工校正为飞轮动力的自进化图像识别闭环系统"
+requires-python = ">=3.10"
+# 依赖放 backend/requirements.txt，这里只管工具配置
+
+# ======================== Ruff ========================
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["backend", "tests"]
+extend-exclude = [
+    "runtime_data",
+    "backend/weights",
+    "frontend",
+    ".venv",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "A",   # flake8-builtins
+    "C4",  # flake8-comprehensions
+    "DTZ", # flake8-datetimez
+    "T20", # flake8-print
+    "PT",  # flake8-pytest-style
+    "RET", # flake8-return
+    "SIM", # flake8-simplify
+    "TID", # flake8-tidy-imports
+    "ARG", # flake8-unused-arguments
+]
+ignore = [
+    "E501",   # line too long（交给 formatter）
+    "B008",   # function call in default arg（FastAPI Depends 常用）
+    "ARG001", # unused method argument（接口实现需要）
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+# ======================== Pyright ========================
+[tool.pyright]
+include = ["backend"]
+exclude = ["**/__pycache__", "runtime_data", "backend/weights", "frontend"]
+pythonVersion = "3.10"
+typeCheckingMode = "standard"
+reportMissingImports = true
+reportMissingTypeStubs = false
+# services 不依赖 FastAPI，保持可独立测试
+venvPath = "."
+venv = ".venv"
+
+# ======================== Pytest ========================
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["backend/tests", "tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "-q",
+]
+markers = [
+    "slow: 慢测试（真实推理、真实训练），CI 默认跳过",
+    "integration: 需要数据库/文件系统的集成测试",
+    "requires_torch: 需要 torch 环境",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
