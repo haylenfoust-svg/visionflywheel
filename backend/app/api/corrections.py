@@ -199,7 +199,10 @@ def list_feedback(
     _q = db.query(FeedbackTicketModel)
     if status:
         _q = _q.filter(FeedbackTicketModel.status == status)
-    if mine or user.role != "admin":
+    # `mine=True` narrows to the caller's own tickets. Otherwise visibility is
+    # governed purely by the org/team scope filter below — a user with
+    # `feedback.read` sees every ticket in their scope, regardless of submitter.
+    if mine:
         _q = _q.filter(FeedbackTicketModel.username == user.username)
     _q = apply_scope_filter_via_task(_q, user, FeedbackTicketModel, db)
     _total = _q.count()

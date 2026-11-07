@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.core.deps import AdminUser, CurrentUser
 from app.core.envelope import EnvelopeRoute
 from app.core.exceptions import AppError, Err
+from app.models.dataset import DatasetExport as DatasetExportModel
 from app.schemas.common import Page
 from app.schemas.dataset import (
     DatasetExportOut,
@@ -28,6 +29,7 @@ from app.schemas.dataset import (
 )
 from app.services import dataset_exporter, train_service, weight_manager
 from app.services.permission_service import require_permission
+from app.services.scope_service import apply_scope_filter
 
 router = APIRouter(tags=["dataset"], route_class=EnvelopeRoute)
 
@@ -57,12 +59,17 @@ def dataset_export(
 
 @router.get("/dataset", response_model=Page[DatasetExportRow])
 def dataset_list(
-    _: AdminUser,
+    user: CurrentUser,
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
+    _perm: object = Depends(require_permission("dataset.read")),
 ) -> Page[DatasetExportRow]:
-    payload = dataset_exporter.list_exports(db, page=page, page_size=page_size)
+    _q = apply_scope_filter(db.query(DatasetExportModel), user, DatasetExportModel, db)
+    _total = _q.count()
+    _rows = _q.order_by(DatasetExportModel.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    _pages = (_total + page_size - 1) // page_size if _total else 0
+    payload = {"items": _rows, "total": _total, "page": page, "page_size": page_size, "pages": _pages}
     return Page[DatasetExportRow](
         items=[DatasetExportRow.model_validate(r) for r in payload["items"]],
         total=payload["total"],

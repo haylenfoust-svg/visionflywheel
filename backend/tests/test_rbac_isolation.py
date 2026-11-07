@@ -49,11 +49,12 @@ def _upload(client, token: str, name: str = "s.png", org_id: int | None = None, 
             data["org_id"] = (None, str(org_id))
         if team_id is not None:
             data["team_id"] = (None, str(team_id))
+        form_data = {k: v[1] for k, v in data.items() if k != "file"}
         resp = client.post(
             "/api/tasks/upload",
             headers={"Authorization": f"Bearer {token}"},
             files={"file": data["file"]},
-            data={k: v[1] for k, v in data.items() if k != "file"},
+            data=form_data,
         )
     assert resp.status_code == 200, resp.text
     return resp.json()["data"]
@@ -305,3 +306,262 @@ class TestQualityMetrics:
         data = r.json()["data"]
         assert data["totals"]["rejected"] >= 1
         assert data["rates"]["false_positive_rate"] > 0
+
+
+class TestScopeOnChildModels:
+    """corrections / dataset / feedback inherit scope via task_id (B端-2)."""
+
+    def test_corrections_scoped_by_task(self, client, db_session):
+        """Users cannot see corrections made on tasks outside their scope."""
+        admin_token = _login(client, "admin", "admin-password-123")
+        org_a = Organization(name="Corr Org A", code="corr_a")
+        org_b = Organization(name="Corr Org B", code="corr_b")
+        db_session.add_all([org_a, org_b])
+        db_session.commit()
+        db_session.refresh(org_a)
+        db_session.refresh(org_b)
+
+        task_a = _upload(client, admin_token, name="ca.png", org_id=org_a.id)
+        task_b = _upload(client, admin_token, name="cb.png", org_id=org_b.id)
+
+        for tid in [task_a["task_id"], task_b["task_id"]]:
+            dets = client.get(f"/api/tasks/{tid}/detections", headers={"Authorization": f"Bearer {admin_token}"}).json()["data"]
+            if not dets:
+                continue
+            client.post(
+                "/api/corrections",
+                headers={"Authorization": f"Bearer {admin_token}"},
+                json={"action": "confirm", "detection_id": dets[0]["id"]},
+            )
+
+        u = _make_user(db_session, "corr_a_user")
+        _assign_role(db_session, u, "operator", scope_type="org", scope_id=org_a.id)
+        token = _login(client, "corr_a_user", "password-123")
+        r = client.get("/api/corrections/audit", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        items = r.json()["data"]["items"]
+        for c in items:
+            tr = client.get(f"/api/tasks/{c['task_id']}", headers={"Authorization": f"Bearer {admin_token}"})
+            if tr.status_code == 200:
+                org_id = tr.json()["data"].get("org_id")
+                assert org_id != org_b.id, f"leaked org_b correction: {c}"
+
+    def test_dataset_scoped_by_org(self, client, db_session):
+        admin_token = _login(client, "admin", "admin-password-123")
+        org_a = Organization(name="DS A", code="ds_a")
+        db_session.add(org_a)
+        db_session.commit()
+        db_session.refresh(org_a)
+
+        task = _upload(client, admin_token, name="a.png", org_id=org_a.id)
+        # Correct a detection so there is something exportable
+        dets = client.get(
+            f"/api/tasks/{task['task_id']}/detections",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        ).json()["data"]
+        if dets:
+            client.post(
+                "/api/corrections",
+                headers={"Authorization": f"Bearer {admin_token}"},
+                json={"action": "confirm", "detection_id": dets[0]["id"]},
+            )
+        else:
+            client.post(
+                "/api/corrections",
+                headers={"Authorization": f"Bearer {admin_token}"},
+                json={
+                    "action": "add",
+                    "task_id": task["task_id"],
+                    "new_class_name": "target",
+                    "new_bbox": {"x1": 1.0, "y1": 1.0, "x2": 100.0, "y2": 100.0},
+                },
+            )
+        r = client.post(
+            "/api/dataset/export",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"name": "ds_test"},
+        )
+        assert r.status_code == 201
+
+        u = _make_user(db_session, "ds_other")
+        _assign_role(db_session, u, "operator", scope_type="org", scope_id=99999)
+        token = _login(client, "ds_other", "password-123")
+        r = client.get("/api/dataset", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        for item in r.json()["data"]["items"]:
+            assert item.get("org_id") in (None, 99999)
+
+    def test_feedback_scoped(self, client, db_session):
+        admin_token = _login(client, "admin", "admin-password-123")
+        org_a = Organization(name="FB A", code="fb_a")
+        db_session.add(org_a)
+        db_session.commit()
+        db_session.refresh(org_a)
+        task_a = _upload(client, admin_token, name="fa.png", org_id=org_a.id)
+
+        client.post(
+            "/api/feedback",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"content": "org_a issue", "task_id": task_a["task_id"]},
+        )
+
+        u = _make_user(db_session, "fb_a_user")
+        _assign_role(db_session, u, "operator", scope_type="org", scope_id=org_a.id)
+        token = _login(client, "fb_a_user", "password-123")
+        r = client.get("/api/feedback", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        items = r.json()["data"]["items"]
+        assert any(i["content"] == "org_a issue" for i in items), f"should see org_a feedback, got {items}"
+
+        org_b = Organization(name="FB B", code="fb_b")
+        db_session.add(org_b)
+        db_session.commit()
+        db_session.refresh(org_b)
+        u2 = _make_user(db_session, "fb_b_user")
+        _assign_role(db_session, u2, "operator", scope_type="org", scope_id=org_b.id)
+        token2 = _login(client, "fb_b_user", "password-123")
+        r2 = client.get("/api/feedback", headers={"Authorization": f"Bearer {token2}"})
+        items2 = r2.json()["data"]["items"]
+        assert not any(i["content"] == "org_a issue" for i in items2), f"leaked org_a feedback to org_b: {items2}"
+
+
+class TestScopeEdgeCases:
+    """Edge cases: cross-org/team, NULL scope, mixed ownership, no role (B端-2)."""
+
+    def test_null_scope_visible_to_all_scoped_users(self, client, db_session):
+        """Unscoped feedback (task_id NULL) is visible to any user with any scope."""
+        admin_token = _login(client, "admin", "admin-password-123")
+        org_a = Organization(name="Edge A", code="edge_a")
+        db_session.add(org_a)
+        db_session.commit()
+        db_session.refresh(org_a)
+
+        # Admin creates a ticket with NO task_id (unscoped)
+        client.post(
+            "/api/feedback",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"content": "unscoped ticket"},
+        )
+
+        # User scoped to org_a should see it (unscoped is visible to all)
+        u = _make_user(db_session, "edge_a_user")
+        _assign_role(db_session, u, "operator", scope_type="org", scope_id=org_a.id)
+        token = _login(client, "edge_a_user", "password-123")
+        r = client.get("/api/feedback", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        items = r.json()["data"]["items"]
+        assert any(i["content"] == "unscoped ticket" for i in items), f"unscoped visible to scoped user: {items}"
+
+    def test_mixed_org_and_team_scopes(self, client, db_session):
+        """User with BOTH org and team scopes sees rows matching either."""
+        admin_token = _login(client, "admin", "admin-password-123")
+        org_a = Organization(name="Mix Org", code="mix_org")
+        db_session.add(org_a)
+        db_session.commit()
+        db_session.refresh(org_a)
+        team_x = Team(name="Mix X", code="mix_x", org_id=org_a.id)
+        db_session.add(team_x)
+        db_session.commit()
+        db_session.refresh(team_x)
+
+        # Task in org_a (unscoped team)
+        _upload(client, admin_token, name="org.png", org_id=org_a.id)
+        # Task in team_x
+        _upload(client, admin_token, name="team.png", team_id=team_x.id)
+        # Task in org_b (should NOT be visible)
+        org_b = Organization(name="Mix B", code="mix_b")
+        db_session.add(org_b)
+        db_session.commit()
+        db_session.refresh(org_b)
+        _upload(client, admin_token, name="other.png", org_id=org_b.id)
+
+        # User with BOTH org:org_a AND team:team_x scopes
+        u = _make_user(db_session, "mix_user")
+        _assign_role(db_session, u, "operator", scope_type="org", scope_id=org_a.id)
+        _assign_role(db_session, u, "operator", scope_type="team", scope_id=team_x.id)
+        token = _login(client, "mix_user", "password-123")
+        r = client.get("/api/tasks", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        items = r.json()["data"]["items"]
+        org_ids = {t.get("org_id") for t in items}
+        team_ids = {t.get("team_id") for t in items}
+        # Should see org_a rows (org scope) AND team_x rows (team scope)
+        assert org_a.id in org_ids, f"should see org_a: {org_ids}"
+        assert team_x.id in team_ids, f"should see team_x: {team_ids}"
+        # Should NOT see org_b rows
+        assert org_b.id not in org_ids, f"leaked org_b: {org_ids}"
+
+    def test_team_scoped_user_sees_team_rows_and_unscoped(self, client, db_session):
+        admin_token = _login(client, "admin", "admin-password-123")
+        org = Organization(name="TU Org", code="tu_org")
+        db_session.add(org)
+        db_session.commit()
+        db_session.refresh(org)
+        team_a = Team(name="TU A", code="tu_a", org_id=org.id)
+        db_session.add(team_a)
+        db_session.commit()
+        db_session.refresh(team_a)
+
+        # team_a row
+        _upload(client, admin_token, name="team.png", team_id=team_a.id)
+        # unscoped row
+        _upload(client, admin_token, name="unscoped.png")
+
+        u = _make_user(db_session, "tu_user")
+        _assign_role(db_session, u, "operator", scope_type="team", scope_id=team_a.id)
+        token = _login(client, "tu_user", "password-123")
+        r = client.get("/api/tasks", headers={"Authorization": f"Bearer {token}"})
+        items = r.json()["data"]["items"]
+        # Should see team_a row and unscoped row
+        team_ids = {t.get("team_id") for t in items}
+        assert team_a.id in team_ids or None in team_ids, f"should see team_a or unscoped: team_ids={team_ids}"
+
+    def test_no_role_403_on_all_isolated_endpoints(self, client, db_session):
+        """Role-less user is rejected at the permission gate on isolated endpoints."""
+        admin_token = _login(client, "admin", "admin-password-123")
+        _upload(client, admin_token, name="any.png")
+
+        _make_user(db_session, "edge_noperm")
+        token = _login(client, "edge_noperm", "password-123")
+        for path in ["/api/feedback", "/api/corrections/audit", "/api/dataset", "/api/tasks", "/api/stats/quality"]:
+            r = client.get(path, headers={"Authorization": f"Bearer {token}"})
+            assert r.status_code == 403, f"{path} should 403 for role-less user, got {r.status_code}"
+
+    def test_admin_global_sees_all_scoped_rows(self, client, db_session):
+        """Admin (legacy role=admin) sees all rows regardless of scope."""
+        admin_token = _login(client, "admin", "admin-password-123")
+        org_a = Organization(name="Adm A", code="adm_a")
+        org_b = Organization(name="Adm B", code="adm_b")
+        db_session.add_all([org_a, org_b])
+        db_session.commit()
+        db_session.refresh(org_a)
+        db_session.refresh(org_b)
+
+        _upload(client, admin_token, name="a.png", org_id=org_a.id)
+        _upload(client, admin_token, name="b.png", org_id=org_b.id)
+        r = client.get("/api/tasks", headers={"Authorization": f"Bearer {admin_token}"})
+        items = r.json()["data"]["items"]
+        org_ids = {t.get("org_id") for t in items}
+        assert org_a.id in org_ids
+        assert org_b.id in org_ids, f"admin should see both: {org_ids}"
+
+    def test_global_scope_sees_cross_org_rows(self, client, db_session):
+        admin_token = _login(client, "admin", "admin-password-123")
+        org_a = Organization(name="GS A", code="gs_a")
+        org_b = Organization(name="GS B", code="gs_b")
+        db_session.add_all([org_a, org_b])
+        db_session.commit()
+        db_session.refresh(org_a)
+        db_session.refresh(org_b)
+
+        _upload(client, admin_token, name="a.png", org_id=org_a.id)
+        _upload(client, admin_token, name="b.png", org_id=org_b.id)
+
+        u = _make_user(db_session, "gs_global")
+        _assign_role(db_session, u, "operator", scope_type="global")
+        token = _login(client, "gs_global", "password-123")
+        r = client.get("/api/tasks", headers={"Authorization": f"Bearer {token}"})
+        items = r.json()["data"]["items"]
+        org_ids = {t.get("org_id") for t in items}
+        assert org_a.id in org_ids
+        assert org_b.id in org_ids, f"global scope sees all: {org_ids}"

@@ -30,6 +30,8 @@ class TaskOut(BaseModel):
     type: str
     status: str
     created_by: str | None
+    org_id: int | None = None
+    team_id: int | None = None
     conf_threshold: float
     iou_threshold: float
     imgsz: int

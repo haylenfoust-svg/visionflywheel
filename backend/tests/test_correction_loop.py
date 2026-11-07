@@ -292,25 +292,30 @@ class TestFeedback:
         assert resp.status_code == 201
         assert resp.json()["data"]["status"] == "open"
 
-    def test_user_sees_only_own_tickets(self, client, seeded_task):
+    def test_feedback_scope_visibility(self, client, seeded_task):
+        """Default: see all tickets in scope. mine=true narrows to own."""
         task_id, detections = seeded_task
         admin = _login(client)
         user = _login(client, "tester", "test-password-123")
         client.post(
             "/api/feedback",
             headers={"Authorization": f"Bearer {user}"},
-            json={"content": "用户 A 的工单"},
+            json={"content": "tester's ticket"},
         )
-        # admin creates one too
         client.post(
             "/api/feedback",
             headers={"Authorization": f"Bearer {admin}"},
-            json={"content": "管理员的工单"},
+            json={"content": "admin's ticket"},
         )
+        # Default: user sees both (both unscoped, user has global operator role)
         r_user = client.get("/api/feedback", headers={"Authorization": f"Bearer {user}"}).json()["data"]["items"]
+        assert len(r_user) == 2, f"expected both tickets in scope, got {r_user}"
+        # mine=true narrows to own
+        r_mine = client.get("/api/feedback?mine=true", headers={"Authorization": f"Bearer {user}"}).json()["data"]["items"]
+        assert all(t["username"] == "tester" for t in r_mine), f"mine=true should filter to own: {r_mine}"
+        # admin sees both
         r_admin = client.get("/api/feedback", headers={"Authorization": f"Bearer {admin}"}).json()["data"]["items"]
-        assert all(t["username"] == "tester" for t in r_user)
-        assert len(r_admin) == 2  # admin sees everything
+        assert len(r_admin) == 2
 
     def test_admin_can_reply_and_resolve(self, client, seeded_task):
         task_id, detections = seeded_task
