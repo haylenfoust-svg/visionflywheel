@@ -40,6 +40,10 @@ dist/
 .vite/
 .eslintcache
 *.local
+*.tsbuildinfo
+# vue-tsc -b / tsc 误 emit 的构建产物
+*.vue.js
+vite.config.js
 
 # ===== 环境与密钥 =====
 .env
