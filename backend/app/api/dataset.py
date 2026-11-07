@@ -28,6 +28,8 @@ from app.schemas.dataset import (
     WeightOut,
 )
 from app.services import dataset_exporter, train_service, weight_manager
+from app.services.drift_service import drift_report
+from app.services.metrics_service import training_curves, training_history
 from app.services.permission_service import require_permission
 from app.services.scope_service import apply_scope_filter
 
@@ -159,6 +161,41 @@ def weights_set_default(weight_id: int, admin: CurrentUser, db: Session = Depend
 @router.delete("/weights/{weight_id}", status_code=204)
 def weights_delete(weight_id: int, admin: CurrentUser, db: Session = Depends(get_db), _perm: object = Depends(require_permission("weight.delete"))) -> None:
     weight_manager.delete_weight(db, weight_id)
+
+
+# ---------- Training metrics (AI-2 / M4) ----------
+@router.get("/weights/{weight_id}/metrics")
+def weight_metrics(
+    weight_id: int,
+    _u: CurrentUser,
+    db: Session = Depends(get_db),
+    _perm: object = Depends(require_permission("weight.read")),
+) -> dict:
+    """mAP / precision / recall / loss curves for a registered weight."""
+    return training_curves(db, weight_id)
+
+
+@router.get("/weights/{weight_id}/history")
+def weight_history_detail(
+    weight_id: int,
+    _u: CurrentUser,
+    db: Session = Depends(get_db),
+    _perm: object = Depends(require_permission("weight.read")),
+) -> list[dict]:
+    """Training runs associated with a weight's dataset version."""
+    return training_history(db, weight_id)
+
+
+# ---------- Drift monitoring (AI-3) ----------
+@router.get("/stats/drift")
+def drift(
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+    days: int = 30,
+    _perm: object = Depends(require_permission("detection.read")),
+) -> dict:
+    """Confidence / class-distribution / correction-rate drift report."""
+    return drift_report(db, user, days=days)
 
 
 # ---------- Training ----------

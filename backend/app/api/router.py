@@ -2,11 +2,12 @@
 
 from fastapi import APIRouter
 
-from app.api import auth, batch, chat, corrections, dataset, rbac, stats, system, tasks
+from app.api import auth, batch, chat, corrections, dataset, rbac, security, stats, system, tasks
 from app.core.envelope import EnvelopeRoute
 
 api_router = APIRouter(prefix="/api", route_class=EnvelopeRoute)
 api_router.include_router(auth.router)
+api_router.include_router(security.router)
 api_router.include_router(system.router)
 api_router.include_router(tasks.router)
 api_router.include_router(batch.router)
