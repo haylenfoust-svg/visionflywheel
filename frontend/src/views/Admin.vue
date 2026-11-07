@@ -9,17 +9,19 @@ import type { HealthDetail } from '@/api/stats'
 import type { Feedback } from '@/api/corrections'
 import { apiGet, apiPut } from '@/api/http'
 import type { User } from '@/types'
+import AppCard from '@/components/AppCard.vue'
+import EmptyState from '@/components/EmptyState.vue'
+import PageHeader from '@/components/PageHeader.vue'
+import StatCard from '@/components/StatCard.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
-const activeTab = ref<'users' | 'config' | 'audit' | 'feedback' | 'system'>('system')
+const activeTab = ref<'system' | 'users' | 'config' | 'audit' | 'feedback'>('system')
 const loading = ref(false)
 
-// ---- System ----
 const health = ref<HealthDetail | null>(null)
-
-// ---- Users ----
 const users = ref<User[]>([])
+
 const userDialog = ref(false)
 const userForm = reactive({
   id: null as number | null,
@@ -30,7 +32,6 @@ const userForm = reactive({
   is_active: true,
 })
 
-// ---- Config ----
 interface ConfigEntry {
   value: unknown
   source: 'db' | 'env' | 'default'
@@ -50,8 +51,12 @@ const configLabels: Record<string, string> = {
   llm_model: 'LLM 模型',
   embedding_model: 'Embedding 模型',
 }
+const sourceChip: Record<string, string> = {
+  db: 'chip-success',
+  env: 'chip-warning',
+  default: 'chip-neutral',
+}
 
-// ---- Audit ----
 interface AuditRow {
   id: number
   entity: string
@@ -65,15 +70,20 @@ interface AuditRow {
 const audit = ref<AuditRow[]>([])
 const auditEntity = ref<string | null>(null)
 
-// ---- Feedback ----
 const tickets = ref<Feedback[]>([])
 
-const roleLabel = (r: string) => (r === 'admin' ? '管理员' : '操作员')
-const statusType: Record<string, 'info' | 'success' | 'warning' | 'danger'> = {
-  open: 'warning',
-  replied: 'info',
-  resolved: 'success',
-  rejected: 'danger',
+const filteredAudit = computed(() => {
+  if (!auditEntity.value) return audit.value
+  return audit.value.filter((r) => r.entity === auditEntity.value)
+})
+
+const statusChip: Record<string, string> = {
+  open: 'chip-warning',
+  replied: 'chip-primary',
+  resolved: 'chip-success',
+  rejected: 'chip-danger',
+  user: 'chip-neutral',
+  admin: 'chip-warning',
 }
 
 async function refresh() {
@@ -127,7 +137,7 @@ async function saveUser() {
         role: userForm.role,
         display_name: userForm.display_name || undefined,
       })
-      ElMessage.success('用户已创建')
+      ElMessage.success('✓ 用户已创建')
     } else {
       await updateUser(userForm.id, {
         role: userForm.role,
@@ -135,7 +145,7 @@ async function saveUser() {
         display_name: userForm.display_name,
         ...(userForm.password ? { password: userForm.password } : {}),
       })
-      ElMessage.success('用户已更新')
+      ElMessage.success('✓ 用户已更新')
     }
     userDialog.value = false
     await refresh()
@@ -159,7 +169,7 @@ async function saveConfig(key: string) {
   else if (!Number.isNaN(Number(raw)) && raw.trim() !== '') value = Number(raw)
   try {
     await apiPut(`/api/config/${key}`, { value })
-    ElMessage.success(`已更新 ${key}`)
+    ElMessage.success(`✓ 已更新 ${key}`)
     await refresh()
     delete configEdits.value[key]
   } catch (err) {
@@ -187,210 +197,283 @@ async function setStatus(t: Feedback, status: string) {
   await refresh()
 }
 
-const filteredAudit = computed(() => {
-  if (!auditEntity.value) return audit.value
-  return audit.value.filter((r) => r.entity === auditEntity.value)
-})
-
 onMounted(refresh)
 </script>
 
 <template>
-  <div class="page admin">
-    <h2>系统管理</h2>
-    <p class="lead">用户、配置、审计、工单——所有管理操作集中在这一处。</p>
+  <div class="page">
+    <PageHeader
+      title="系统管理"
+      subtitle="用户、配置、审计、工单——所有管理操作集中在这一处。"
+      :breadcrumb="[{ text: '控制台', to: '/dashboard' }, { text: '系统管理' }]"
+    />
+
+    <!-- 顶部统计 -->
+    <div class="stats-grid">
+      <StatCard label="用户" :value="users.length" accent="neutral" icon="👥" />
+      <StatCard label="配置项" :value="Object.keys(config).length" accent="neutral" icon="⚙" />
+      <StatCard label="审计条目" :value="audit.length" accent="primary" icon="📋" />
+      <StatCard label="工单" :value="tickets.length" accent="warning" icon="⚑" />
+    </div>
 
     <el-tabs v-model="activeTab">
       <!-- 系统状态 -->
       <el-tab-pane label="系统状态" name="system">
-        <div class="sys-grid">
-          <el-descriptions :column="2" border>
-            <el-descriptions-item label="应用">{{ health?.app }}</el-descriptions-item>
-            <el-descriptions-item label="版本">{{ health?.version }}</el-descriptions-item>
-            <el-descriptions-item label="数据库">
-              <el-tag size="small" :type="health?.db === 'ok' ? 'success' : 'danger'">
-                {{ health?.db }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="数据库类型">{{ health?.database_url_scheme }}</el-descriptions-item>
-            <el-descriptions-item label="检测器">
-              <el-tag size="small" :type="health?.detector_mode === 'yolo' ? 'success' : 'warning'">
-                {{ health?.detector_mode }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="降级兜底">
-              <el-tag size="small" :type="health?.fallback_enabled ? 'success' : 'info'">
-                {{ health?.fallback_enabled ? '启用' : '禁用' }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="用户数">{{ health?.user_count }}</el-descriptions-item>
-          </el-descriptions>
-        </div>
+        <AppCard title="运行时信息" subtitle="系统健康与引擎状态">
+          <div v-if="health" class="system-grid">
+            <div class="system-item">
+              <div class="system-item__label">应用</div>
+              <div class="system-item__value">{{ health.app }}</div>
+            </div>
+            <div class="system-item">
+              <div class="system-item__label">版本</div>
+              <div class="system-item__value mono">{{ health.version }}</div>
+            </div>
+            <div class="system-item">
+              <div class="system-item__label">数据库</div>
+              <div class="system-item__value">
+                <span class="chip" :class="health.db === 'ok' ? 'chip-success' : 'chip-danger'">
+                  {{ health.db }}
+                </span>
+              </div>
+            </div>
+            <div class="system-item">
+              <div class="system-item__label">数据库类型</div>
+              <div class="system-item__value mono">{{ health.database_url_scheme }}</div>
+            </div>
+            <div class="system-item">
+              <div class="system-item__label">检测器</div>
+              <div class="system-item__value">
+                <span class="chip" :class="health.detector_mode === 'yolo' ? 'chip-success' : 'chip-warning'">
+                  {{ health.detector_mode }}
+                </span>
+              </div>
+            </div>
+            <div class="system-item">
+              <div class="system-item__label">降级兜底</div>
+              <div class="system-item__value">
+                <span class="chip" :class="health.fallback_enabled ? 'chip-success' : 'chip-neutral'">
+                  {{ health.fallback_enabled ? '启用' : '禁用' }}
+                </span>
+              </div>
+            </div>
+            <div class="system-item">
+              <div class="system-item__label">用户数</div>
+              <div class="system-item__value num">{{ health.user_count }}</div>
+            </div>
+          </div>
+        </AppCard>
       </el-tab-pane>
 
       <!-- 用户管理 -->
-      <el-tab-pane :label="`用户管理 (${users.length})`" name="users">
-        <div class="toolbar">
-          <el-button type="primary" size="small" @click="openCreateUser">新建用户</el-button>
-        </div>
-        <el-table :data="users" size="small">
-          <el-table-column prop="id" label="ID" width="70" />
-          <el-table-column prop="username" label="用户名" width="140" />
-          <el-table-column prop="display_name" label="显示名" width="140" />
-          <el-table-column prop="role" label="角色" width="110">
-            <template #default="{ row }">
-              <el-tag size="small" :type="row.role === 'admin' ? 'warning' : 'info'">
-                {{ roleLabel(row.role) }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="is_active" label="状态" width="90">
-            <template #default="{ row }">
-              <el-tag size="small" :type="row.is_active ? 'success' : 'danger'">
-                {{ row.is_active ? '启用' : '禁用' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="created_at" label="创建时间" width="180" />
-          <el-table-column label="操作" width="180">
-            <template #default="{ row }">
-              <el-button size="small" text type="primary" @click="openEditUser(row)">编辑</el-button>
-              <el-button
-                size="small"
-                text
-                :type="row.is_active ? 'danger' : 'success'"
-                :disabled="row.id === auth.user?.id"
-                @click="toggleUser(row)"
-              >
-                {{ row.is_active ? '禁用' : '启用' }}
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+      <el-tab-pane :label="`用户 (${users.length})`" name="users">
+        <AppCard>
+          <template #actions>
+            <el-button type="primary" @click="openCreateUser">+ 新建用户</el-button>
+          </template>
+          <el-table :data="users" size="default">
+            <el-table-column prop="id" label="#" width="80" />
+            <el-table-column prop="username" label="用户名" min-width="140" />
+            <el-table-column prop="display_name" label="显示名" min-width="140" />
+            <el-table-column label="角色" width="110">
+              <template #default="{ row }">
+                <span class="chip" :class="statusChip[row.role]">
+                  {{ row.role === 'admin' ? '管理员' : '操作员' }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="100">
+              <template #default="{ row }">
+                <span class="chip" :class="row.is_active ? 'chip-success' : 'chip-danger'">
+                  {{ row.is_active ? '启用' : '禁用' }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="created_at" label="创建时间" width="180" />
+            <el-table-column label="操作" width="180">
+              <template #default="{ row }">
+                <el-button size="small" text type="primary" @click="openEditUser(row)">编辑</el-button>
+                <el-button
+                  size="small"
+                  text
+                  :type="row.is_active ? 'danger' : 'success'"
+                  :disabled="row.id === auth.user?.id"
+                  @click="toggleUser(row)"
+                >
+                  {{ row.is_active ? '禁用' : '启用' }}
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </AppCard>
       </el-tab-pane>
 
       <!-- 配置 -->
       <el-tab-pane label="系统配置" name="config">
-        <el-alert type="info" :closable="false" class="note" title="配置三级优先级" description="数据库 > 环境变量 > 代码默认。此处修改的是数据库层，立即生效（ADR-003）。" />
-        <el-table :data="Object.entries(config).map(([k, v]) => ({ key: k, ...v }))" size="small">
-          <el-table-column label="键" width="220">
-            <template #default="{ row }">
-              <div>{{ configLabels[row.key] ?? row.key }}</div>
-              <code class="key">{{ row.key }}</code>
-            </template>
-          </el-table-column>
-          <el-table-column label="当前值" min-width="180">
-            <template #default="{ row }">
-              <el-input
-                v-if="configEdits[row.key] !== undefined"
-                v-model="configEdits[row.key]"
-                size="small"
-              />
-              <code v-else class="val">{{ JSON.stringify(row.value) }}</code>
-            </template>
-          </el-table-column>
-          <el-table-column prop="source" label="来源" width="90">
-            <template #default="{ row }">
-              <el-tag size="small" :type="row.source === 'db' ? 'success' : row.source === 'env' ? 'warning' : 'info'">
-                {{ row.source }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="默认值" min-width="150">
-            <template #default="{ row }">
-              <code class="val">{{ JSON.stringify(row.default) }}</code>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="160">
-            <template #default="{ row }">
-              <template v-if="configEdits[row.key] !== undefined">
-                <el-button size="small" text type="primary" @click="saveConfig(row.key)">保存</el-button>
-                <el-button size="small" text @click="delete configEdits[row.key]">取消</el-button>
+        <AppCard title="配置三级优先级" subtitle="数据库 > 环境变量 > 代码默认（ADR-003）">
+          <el-table :data="Object.entries(config).map(([k, v]) => ({ key: k, ...v }))" size="default">
+            <el-table-column label="键" min-width="220">
+              <template #default="{ row }">
+                <div class="config-key">
+                  <div class="config-key__name">{{ configLabels[row.key] ?? row.key }}</div>
+                  <code class="mono config-key__id">{{ row.key }}</code>
+                </div>
               </template>
-              <el-button v-else size="small" text type="primary" @click="configEdits[row.key] = String(row.value ?? '')">
-                编辑
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+            </el-table-column>
+            <el-table-column label="当前值" min-width="200">
+              <template #default="{ row }">
+                <el-input
+                  v-if="configEdits[row.key] !== undefined"
+                  v-model="configEdits[row.key]"
+                  size="small"
+                />
+                <code v-else class="mono">{{ JSON.stringify(row.value) }}</code>
+              </template>
+            </el-table-column>
+            <el-table-column label="来源" width="110">
+              <template #default="{ row }">
+                <span class="chip" :class="sourceChip[row.source]">{{ row.source }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="默认值" min-width="150">
+              <template #default="{ row }">
+                <code class="mono text-subtle">{{ JSON.stringify(row.default) }}</code>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="170">
+              <template #default="{ row }">
+                <template v-if="configEdits[row.key] !== undefined">
+                  <el-button size="small" text type="primary" @click="saveConfig(row.key)">保存</el-button>
+                  <el-button size="small" text @click="delete configEdits[row.key]">取消</el-button>
+                </template>
+                <el-button
+                  v-else
+                  size="small"
+                  text
+                  type="primary"
+                  @click="configEdits[row.key] = String(row.value ?? '')"
+                >
+                  编辑
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </AppCard>
       </el-tab-pane>
 
       <!-- 审计 -->
-      <el-tab-pane :label="`审计日志 (${audit.length})`" name="audit">
-        <div class="toolbar">
-          <el-select v-model="auditEntity" placeholder="按类型筛选" clearable size="small" style="width: 180px">
-            <el-option value="config" label="配置" />
-            <el-option value="correction" label="校正" />
-            <el-option value="weight" label="权重" />
-          </el-select>
-          <span class="hint">{{ filteredAudit.length }} 条记录</span>
-        </div>
-        <el-table :data="filteredAudit" size="small" max-height="500">
-          <el-table-column prop="id" label="ID" width="80" />
-          <el-table-column prop="created_at" label="时间" width="180" />
-          <el-table-column prop="entity" label="类型" width="100" />
-          <el-table-column prop="entity_key" label="键" width="180" />
-          <el-table-column prop="action" label="动作" width="100" />
-          <el-table-column prop="operator" label="操作人" width="120" />
-          <el-table-column label="旧值" min-width="180">
-            <template #default="{ row }">
-              <code class="val">{{ (row.old_value ?? '').slice(0, 60) }}</code>
-            </template>
-          </el-table-column>
-          <el-table-column label="新值" min-width="180">
-            <template #default="{ row }">
-              <code class="val">{{ (row.new_value ?? '').slice(0, 60) }}</code>
-            </template>
-          </el-table-column>
-        </el-table>
+      <el-tab-pane :label="`审计 (${audit.length})`" name="audit">
+        <AppCard>
+          <template #actions>
+            <el-select v-model="auditEntity" placeholder="按类型筛选" clearable style="width: 180px">
+              <el-option value="config" label="配置" />
+              <el-option value="correction" label="校正" />
+              <el-option value="weight" label="权重" />
+            </el-select>
+            <span class="text-subtle ml-2">{{ filteredAudit.length }} 条记录</span>
+          </template>
+          <el-table :data="filteredAudit" size="default" max-height="500">
+            <el-table-column prop="id" label="#" width="80" />
+            <el-table-column prop="created_at" label="时间" width="180" />
+            <el-table-column label="类型" width="110">
+              <template #default="{ row }">
+                <span class="chip chip-neutral">{{ row.entity }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="entity_key" label="键" min-width="150" />
+            <el-table-column label="动作" width="110">
+              <template #default="{ row }">
+                <span class="chip" :class="row.action === 'delete' ? 'chip-danger' : 'chip-primary'">
+                  {{ row.action }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="operator" label="操作人" width="120" />
+            <el-table-column label="旧值 → 新值" min-width="220">
+              <template #default="{ row }">
+                <div class="audit-change">
+                  <code class="mono">{{ (row.old_value ?? '—').slice(0, 30) }}</code>
+                  <span class="audit-arrow">→</span>
+                  <code class="mono">{{ (row.new_value ?? '—').slice(0, 30) }}</code>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+          <EmptyState
+            v-if="!filteredAudit.length"
+            title="暂无审计记录"
+            description="配置变更和用户操作会记录在这里"
+            icon="📋"
+            size="sm"
+          />
+        </AppCard>
       </el-tab-pane>
 
       <!-- 工单 -->
-      <el-tab-pane :label="`反馈工单 (${tickets.length})`" name="feedback">
-        <el-table :data="tickets" size="small">
-          <el-table-column prop="id" label="ID" width="70" />
-          <el-table-column prop="created_at" label="时间" width="180" />
-          <el-table-column prop="username" label="提交人" width="120" />
-          <el-table-column prop="content" label="内容" min-width="220" />
-          <el-table-column prop="status" label="状态" width="110">
-            <template #default="{ row }">
-              <el-tag size="small" :type="statusType[row.status]">{{ row.status }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="reply" label="回复" min-width="180" />
-          <el-table-column label="操作" width="220">
-            <template #default="{ row }">
-              <el-button size="small" text type="primary" @click="replyTicket(row)">回复</el-button>
-              <el-button size="small" text type="success" @click="setStatus(row, 'resolved')">解决</el-button>
-              <el-button size="small" text type="danger" @click="setStatus(row, 'rejected')">驳回</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+      <el-tab-pane :label="`工单 (${tickets.length})`" name="feedback">
+        <AppCard>
+          <el-table :data="tickets" size="default">
+            <el-table-column prop="id" label="#" width="80" />
+            <el-table-column prop="created_at" label="时间" width="180" />
+            <el-table-column prop="username" label="提交人" width="120" />
+            <el-table-column prop="content" label="内容" min-width="220" />
+            <el-table-column label="状态" width="110">
+              <template #default="{ row }">
+                <span class="chip" :class="statusChip[row.status]">{{ row.status }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="reply" label="回复" min-width="200" />
+            <el-table-column label="操作" width="220">
+              <template #default="{ row }">
+                <el-button size="small" text type="primary" @click="replyTicket(row)">回复</el-button>
+                <el-button size="small" text type="success" @click="setStatus(row, 'resolved')">解决</el-button>
+                <el-button size="small" text type="danger" @click="setStatus(row, 'rejected')">驳回</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <EmptyState
+            v-if="!tickets.length"
+            title="暂无工单"
+            description="用户提交的反馈会显示在这里"
+            icon="⚑"
+            size="sm"
+          />
+        </AppCard>
       </el-tab-pane>
     </el-tabs>
 
     <!-- 用户对话框 -->
-    <el-dialog v-model="userDialog" :title="userForm.id ? '编辑用户' : '新建用户'" width="420">
-      <el-form label-width="80px">
-        <el-form-item label="用户名">
-          <el-input v-model="userForm.username" :disabled="userForm.id != null" />
-        </el-form-item>
-        <el-form-item label="密码">
-          <el-input v-model="userForm.password" type="password" :placeholder="userForm.id ? '留空则不修改' : ''" />
-        </el-form-item>
-        <el-form-item label="显示名">
-          <el-input v-model="userForm.display_name" />
-        </el-form-item>
-        <el-form-item label="角色">
+    <el-dialog v-model="userDialog" :title="userForm.id ? '✎ 编辑用户' : '+ 新建用户'" width="460" append-to-body>
+      <div class="dialog-form">
+        <div class="field">
+          <label class="field-label">用户名</label>
+          <el-input v-model="userForm.username" :disabled="userForm.id != null" size="large" />
+        </div>
+        <div class="field">
+          <label class="field-label">密码</label>
+          <el-input
+            v-model="userForm.password"
+            type="password"
+            size="large"
+            :placeholder="userForm.id ? '留空则不修改' : ''"
+          />
+        </div>
+        <div class="field">
+          <label class="field-label">显示名</label>
+          <el-input v-model="userForm.display_name" size="large" />
+        </div>
+        <div class="field">
+          <label class="field-label">角色</label>
           <el-radio-group v-model="userForm.role">
             <el-radio value="user">操作员</el-radio>
             <el-radio value="admin">管理员</el-radio>
           </el-radio-group>
-        </el-form-item>
-        <el-form-item v-if="userForm.id" label="状态">
+        </div>
+        <div v-if="userForm.id" class="field">
+          <label class="field-label">状态</label>
           <el-switch v-model="userForm.is_active" active-text="启用" inactive-text="禁用" />
-        </el-form-item>
-      </el-form>
+        </div>
+      </div>
       <template #footer>
         <el-button @click="userDialog = false">取消</el-button>
         <el-button type="primary" @click="saveUser">保存</el-button>
@@ -400,36 +483,83 @@ onMounted(refresh)
 </template>
 
 <style scoped>
-.lead {
-  color: var(--vf-ink-muted);
+.ml-2 { margin-left: var(--sp-2); }
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-6);
 }
-.toolbar {
+
+.system-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-3);
+}
+.system-item {
+  padding: var(--sp-3);
+  background: var(--bg-subtle);
+  border-radius: var(--r-md);
+}
+.system-item__label {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+  margin-bottom: 2px;
+}
+.system-item__value {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+}
+
+.config-key__name {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+}
+.config-key__id {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+.audit-change {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
 }
-.hint {
-  color: var(--vf-ink-muted);
-  font-size: 12px;
+.audit-arrow {
+  color: var(--text-tertiary);
 }
-.note {
-  margin-bottom: 12px;
+
+/* chips */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  border-radius: var(--r-full);
 }
-.key {
-  font-family: var(--vf-font-mono);
-  font-size: 11px;
-  color: var(--vf-ink-muted);
+.chip-primary  { color: var(--c-primary-700);  background: var(--c-primary-50); }
+.chip-success  { color: var(--c-success-600);  background: var(--c-success-50); }
+.chip-warning  { color: var(--c-warning-600);  background: var(--c-warning-50); }
+.chip-danger   { color: var(--c-danger-600);   background: var(--c-danger-50); }
+.chip-neutral  { color: var(--text-secondary);  background: var(--bg-subtle); }
+
+/* 对话框 */
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
 }
-.val {
-  font-family: var(--vf-font-mono);
-  font-size: 11px;
-  background: var(--vf-bg);
-  padding: 2px 4px;
-  border-radius: 4px;
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
 }
-.sys-grid {
-  max-width: 820px;
+.field-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-secondary);
 }
 </style>

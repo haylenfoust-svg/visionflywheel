@@ -3,7 +3,11 @@ import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import { batchUpload, uploadAndDetect } from '@/api/tasks'
+import AppCard from '@/components/AppCard.vue'
 import DetectionTable from '@/components/DetectionTable.vue'
+import EmptyState from '@/components/EmptyState.vue'
+import PageHeader from '@/components/PageHeader.vue'
+import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import UploadDrop from '@/components/UploadDrop.vue'
 import type { Detection, UploadResult } from '@/types/detection'
 
@@ -18,13 +22,23 @@ const result = ref<UploadResult | null>(null)
 const selected = ref<Detection | null>(null)
 const previewUrl = ref<string>('')
 const batchProgress = ref<{ done: number; total: number } | null>(null)
-const recentBatch = ref<Array<{ taskId: number; count: number }>>([])
+const recentBatch = ref<Array<{ taskId: number }>>([])
 
 const detectorTag = computed(() => {
   const mode = result.value?.detector_mode
-  if (mode === 'yolo') return { text: 'YOLO', type: 'success' as const }
-  if (mode === 'fallback') return { text: '降级检测器', type: 'warning' as const }
+  if (mode === 'yolo') return { text: 'YOLO 引擎', type: 'success' as const, icon: '⚡' }
+  if (mode === 'fallback') return { text: '降级检测器', type: 'warning' as const, icon: '🛡' }
   return null
+})
+
+const classDistribution = computed(() => {
+  if (!result.value) return []
+  const map = new Map<string, number>()
+  for (const d of result.value.detections) {
+    const name = d.class_name_zh || d.class_name
+    map.set(name, (map.get(name) ?? 0) + 1)
+  }
+  return Array.from(map.entries()).map(([name, count]) => ({ name, count }))
 })
 
 async function onFile(file: File) {
@@ -40,7 +54,7 @@ async function onFile(file: File) {
     result.value = res
     previewUrl.value = res.result_url || res.image_url
     if (res.detector_mode === 'fallback') {
-      ElMessage.warning('当前使用降级检测器（torch/ultralytics 未安装）。闭环可跑通，但精度有限。')
+      ElMessage.warning('当前使用降级检测器。闭环可跑通，但精度有限。')
     } else {
       ElMessage.success(`识别完成，共 ${res.detections.length} 个目标`)
     }
@@ -63,11 +77,9 @@ async function onBatch(files: File[]) {
       imgsz: params.imgsz,
     })
     batchProgress.value = { done: res.total_items, total: files.length }
-    recentBatch.value = res.task_ids.slice(0, 6).map((id) => ({ taskId: id, count: 0 }))
+    recentBatch.value = res.task_ids.slice(0, 6).map((id) => ({ taskId: id }))
     ElMessage.success(`批量识别完成：${res.total_items} 个任务`)
-    if (res.status === 'partial') {
-      ElMessage.warning('部分图片识别失败，详见后端日志')
-    }
+    if (res.status === 'partial') ElMessage.warning('部分图片识别失败')
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '批量识别失败')
   } finally {
@@ -79,196 +91,465 @@ async function onBatch(files: File[]) {
 function onSelectDetection(d: Detection) {
   selected.value = d
 }
+
+function reset() {
+  result.value = null
+  selected.value = null
+  previewUrl.value = ''
+}
 </script>
 
 <template>
-  <div class="page detect">
-    <h2>识别</h2>
-    <p class="lead">上传一张图片，看模型框出什么。看错了之后可以去「校正」页面修改（M3）。</p>
+  <div class="page">
+    <PageHeader
+      title="识别"
+      subtitle="上传图片，实时看模型框出什么。看错了就去「校正工作台」修改——每次修正都会让模型更强。"
+      :breadcrumb="[{ text: '控制台', to: '/dashboard' }, { text: '识别' }]"
+    >
+      <template #actions>
+        <el-tag v-if="detectorTag" :type="detectorTag.type" size="large" effect="light" round>
+          {{ detectorTag.icon }} {{ detectorTag.text }}
+        </el-tag>
+        <el-button v-if="result" size="large" @click="reset">重新开始</el-button>
+      </template>
+    </PageHeader>
+
+    <!-- 降级模式提示 -->
+    <el-alert
+      v-if="detectorTag?.type === 'warning'"
+      type="warning"
+      :closable="false"
+      show-icon
+      class="mb-6"
+    >
+      <template #title>
+        <strong>降级检测器已启用</strong>
+        <span class="ml-2">
+          未检测到 ultralytics/torch，已切到规则检测器。闭环可跑通，精度有限。
+          安装 <code class="mono">pip install -r requirements-ml.txt</code> 可切回真实 YOLO。
+        </span>
+      </template>
+    </el-alert>
 
     <div class="grid">
-      <section class="panel">
-        <h3>上传</h3>
-        <UploadDrop
-          :disabled="loading"
-          :multiple="true"
-          @select="onFile"
-          @select-many="onBatch"
-        />
-
-        <div v-if="batchProgress" class="batch-progress">
-          <el-progress
-            :percentage="Math.round((batchProgress.done / batchProgress.total) * 100)"
-            :stroke-width="8"
+      <!-- 左侧：上传 + 参数 -->
+      <aside class="sidebar">
+        <AppCard title="上传" subtitle="支持多选拖拽" hoverable>
+          <UploadDrop
+            :disabled="loading"
+            :multiple="true"
+            @select="onFile"
+            @select-many="onBatch"
           />
-          <div class="batch-text">{{ batchProgress.done }} / {{ batchProgress.total }}</div>
-        </div>
-        <div v-if="recentBatch.length" class="recent-batch">
-          <div class="sub">最近批量任务：</div>
-          <el-tag v-for="t in recentBatch" :key="t.taskId" size="small" class="tag">
-            #{{ t.taskId }}
-          </el-tag>
-        </div>
 
-        <div class="params">
-          <div class="field">
-            <label>置信度阈值 (conf)</label>
-            <el-slider v-model="params.conf_threshold" :min="0" :max="1" :step="0.05" show-input />
-          </div>
-          <div class="field">
-            <label>IoU 阈值</label>
-            <el-slider v-model="params.iou_threshold" :min="0" :max="1" :step="0.05" show-input />
-          </div>
-          <div class="field">
-            <label>推理尺寸 (imgsz)</label>
-            <el-select v-model="params.imgsz" size="small" style="width: 140px">
-              <el-option :value="320" label="320" />
-              <el-option :value="640" label="640" />
-              <el-option :value="960" label="960" />
-              <el-option :value="1280" label="1280" />
-            </el-select>
-          </div>
-        </div>
-
-        <el-alert
-          v-if="detectorTag?.type === 'warning'"
-          type="warning"
-          :closable="false"
-          title="降级检测器已启用"
-          description="未检测到 ultralytics/torch，已切到规则检测器。闭环（识别→校正→导出）可完整跑通，精度有限。安装 `pip install -r requirements-ml.txt` 可切回真实 YOLO。"
-        />
-      </section>
-
-      <section class="panel">
-        <h3>结果</h3>
-        <div v-if="loading" class="loading">
-          <el-icon class="is-loading" :size="24"><i class="el-icon-loading" /></el-icon>
-          <p>识别中…</p>
-        </div>
-
-        <template v-else-if="result">
-          <div class="result-header">
-            <el-tag v-if="detectorTag" :type="detectorTag.type" size="small">
-              {{ detectorTag.text }}
-            </el-tag>
-            <span class="meta">
-              任务 #{{ result.task_id }} · {{ result.inference_ms.toFixed(0) }}ms ·
-              {{ result.detections.length }} 个目标
-            </span>
+          <div v-if="batchProgress" class="batch-progress">
+            <div class="batch-progress__label">
+              批量识别中
+              <span class="num">{{ batchProgress.done }} / {{ batchProgress.total }}</span>
+            </div>
+            <el-progress
+              :percentage="Math.round((batchProgress.done / batchProgress.total) * 100)"
+              :stroke-width="8"
+              :show-text="false"
+            />
           </div>
 
-          <div class="canvas-wrap">
-            <img v-if="previewUrl" :src="previewUrl" alt="识别结果" class="preview" />
-            <el-empty v-else description="无结果图" />
+          <div v-if="recentBatch.length" class="recent-batch">
+            <div class="recent-batch__label">最近批量任务</div>
+            <div class="recent-batch__list">
+              <span v-for="t in recentBatch" :key="t.taskId" class="chip chip-neutral">
+                #{{ t.taskId }}
+              </span>
+            </div>
           </div>
+        </AppCard>
 
-          <h4>检测明细</h4>
-          <DetectionTable :detections="result.detections" @select="onSelectDetection" />
+        <AppCard title="推理参数" subtitle="实时生效">
+          <div class="params">
+            <div class="param-row">
+              <div class="param-head">
+                <label class="param-label">置信度阈值</label>
+                <span class="param-value num">{{ params.conf_threshold.toFixed(2) }}</span>
+              </div>
+              <el-slider
+                v-model="params.conf_threshold"
+                :min="0"
+                :max="1"
+                :step="0.05"
+                :show-tooltip="false"
+              />
+              <div class="param-hint">宁可错杀调低，避免噪声调高</div>
+            </div>
 
-          <el-descriptions v-if="selected" :column="1" size="small" class="detail" title="选中项">
-            <el-descriptions-item label="ID">{{ selected.id }}</el-descriptions-item>
-            <el-descriptions-item label="类别（英文）">{{ selected.class_name }}</el-descriptions-item>
-            <el-descriptions-item label="类别（中文）">{{ selected.class_name_zh ?? '—' }}</el-descriptions-item>
-            <el-descriptions-item label="置信度">{{ (selected.confidence * 100).toFixed(1) }}%</el-descriptions-item>
-            <el-descriptions-item label="坐标">
-              {{ selected.bbox.x1.toFixed(0) }}, {{ selected.bbox.y1.toFixed(0) }},
-              {{ selected.bbox.x2.toFixed(0) }}, {{ selected.bbox.y2.toFixed(0) }}
-            </el-descriptions-item>
-            <el-descriptions-item label="状态">{{ selected.status }}</el-descriptions-item>
-          </el-descriptions>
+            <div class="param-row">
+              <div class="param-head">
+                <label class="param-label">IoU 阈值</label>
+                <span class="param-value num">{{ params.iou_threshold.toFixed(2) }}</span>
+              </div>
+              <el-slider
+                v-model="params.iou_threshold"
+                :min="0"
+                :max="1"
+                :step="0.05"
+                :show-tooltip="false"
+              />
+              <div class="param-hint">重叠框抑制强度</div>
+            </div>
+
+            <div class="param-row">
+              <div class="param-head">
+                <label class="param-label">推理尺寸</label>
+              </div>
+              <el-select v-model="params.imgsz" size="default" class="param-select">
+                <el-option :value="320" label="320 · 快速" />
+                <el-option :value="640" label="640 · 平衡" />
+                <el-option :value="960" label="960 · 精细" />
+                <el-option :value="1280" label="1280 · 精细" />
+              </el-select>
+            </div>
+          </div>
+        </AppCard>
+      </aside>
+
+      <!-- 右侧：结果 -->
+      <section class="content">
+        <!-- 加载骨架 -->
+        <AppCard v-if="loading" title="识别中">
+          <div class="loading-state">
+            <SkeletonBlock variant="block" height="360px" />
+            <SkeletonBlock :lines="3" height="14px" class="mt-4" />
+          </div>
+        </AppCard>
+
+        <!-- 空态 -->
+        <AppCard v-else-if="!result">
+          <EmptyState
+            title="还没有识别结果"
+            description="拖一张图片到左侧开始识别。也可以一次拖多张做批量识别。"
+            icon="◎"
+            size="lg"
+          />
+        </AppCard>
+
+        <!-- 结果 -->
+        <template v-else>
+          <AppCard title="识别结果" class="result-card">
+            <template #actions>
+              <div class="result-meta">
+                <span class="chip chip-primary">任务 #{{ result.task_id }}</span>
+                <span class="chip chip-neutral num">{{ result.inference_ms.toFixed(0) }}ms</span>
+                <span class="chip chip-success">{{ result.detections.length }} 个目标</span>
+              </div>
+            </template>
+
+            <div class="preview">
+              <img v-if="previewUrl" :src="previewUrl" alt="识别结果" class="preview__img" />
+              <div v-else class="preview__empty">无结果图</div>
+            </div>
+
+            <!-- 类别分布 -->
+            <div v-if="classDistribution.length" class="class-dist">
+              <div class="class-dist__title">类别分布</div>
+              <div class="class-dist__list">
+                <div v-for="c in classDistribution" :key="c.name" class="class-dist__item">
+                  <span class="class-dist__name">{{ c.name }}</span>
+                  <div class="class-dist__bar">
+                    <div
+                      class="class-dist__fill"
+                      :style="{
+                        width: `${(c.count / result.detections.length) * 100}%`,
+                      }"
+                    />
+                  </div>
+                  <span class="class-dist__count num">{{ c.count }}</span>
+                </div>
+              </div>
+            </div>
+          </AppCard>
+
+          <AppCard title="检测明细" subtitle="点击行查看详情">
+            <DetectionTable :detections="result.detections" @select="onSelectDetection" />
+
+            <!-- 选中项详情 -->
+            <transition name="slide">
+              <div v-if="selected" class="detail-panel">
+                <div class="detail-panel__header">
+                  <h4>选中项详情</h4>
+                  <el-button size="small" text @click="selected = null">关闭</el-button>
+                </div>
+                <div class="detail-grid">
+                  <div class="detail-item">
+                    <div class="detail-item__label">ID</div>
+                    <div class="detail-item__value num">{{ selected.id }}</div>
+                  </div>
+                  <div class="detail-item">
+                    <div class="detail-item__label">类别（中文）</div>
+                    <div class="detail-item__value">
+                      <span class="chip chip-primary">{{ selected.class_name_zh ?? '—' }}</span>
+                    </div>
+                  </div>
+                  <div class="detail-item">
+                    <div class="detail-item__label">类别（英文）</div>
+                    <div class="detail-item__value mono">{{ selected.class_name }}</div>
+                  </div>
+                  <div class="detail-item">
+                    <div class="detail-item__label">置信度</div>
+                    <div class="detail-item__value num">{{ (selected.confidence * 100).toFixed(1) }}%</div>
+                  </div>
+                  <div class="detail-item">
+                    <div class="detail-item__label">坐标 (x1, y1, x2, y2)</div>
+                    <div class="detail-item__value mono">
+                      {{ selected.bbox.x1.toFixed(0) }}, {{ selected.bbox.y1.toFixed(0) }},
+                      {{ selected.bbox.x2.toFixed(0) }}, {{ selected.bbox.y2.toFixed(0) }}
+                    </div>
+                  </div>
+                  <div class="detail-item">
+                    <div class="detail-item__label">状态</div>
+                    <div class="detail-item__value">
+                      <span
+                        class="chip"
+                        :class="selected.status === 'corrected' ? 'chip-success' : selected.status === 'rejected' ? 'chip-danger' : 'chip-warning'"
+                      >
+                        {{ selected.status === 'corrected' ? '已校正' : selected.status === 'rejected' ? '已否决' : '待校正' }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </transition>
+          </AppCard>
         </template>
-
-        <el-empty v-else description="上传一张图片开始识别" />
       </section>
     </div>
   </div>
 </template>
 
 <style scoped>
-.lead {
-  color: var(--vf-ink-muted);
-}
+.mb-6 { margin-bottom: var(--sp-6); }
+.mt-4 { margin-top: var(--sp-4); }
+.ml-2 { margin-left: var(--sp-2); }
+
 .grid {
   display: grid;
   grid-template-columns: 340px 1fr;
-  gap: 20px;
+  gap: var(--sp-3);
   align-items: start;
 }
-.panel {
-  background: var(--vf-surface);
-  border: 1px solid var(--vf-border);
-  border-radius: var(--vf-radius-lg);
-  padding: 18px;
-}
-.panel h3 {
-  margin: 0 0 12px;
-  font-size: 14px;
-}
-.params {
-  margin-top: 16px;
+.sidebar {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--sp-3);
+  position: sticky;
+  top: var(--sp-4);
 }
-.field label {
-  display: block;
-  font-size: 12px;
-  color: var(--vf-ink-muted);
-  margin-bottom: 4px;
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
 }
+
+/* 参数 */
+.params {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+.param-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.param-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.param-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-secondary);
+}
+.param-value {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  color: var(--text-accent);
+  font-family: var(--font-num);
+}
+.param-hint {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+.param-select {
+  width: 100%;
+}
+
+/* 批量进度 */
 .batch-progress {
-  margin-top: 12px;
+  margin-top: var(--sp-4);
 }
-.batch-text {
-  font-size: 11px;
-  color: var(--vf-ink-muted);
-  margin-top: 4px;
-  text-align: center;
+.batch-progress__label {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-2);
 }
 .recent-batch {
-  margin-top: 8px;
+  margin-top: var(--sp-3);
+}
+.recent-batch__label {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+  margin-bottom: var(--sp-2);
+}
+.recent-batch__list {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  gap: var(--sp-1);
   flex-wrap: wrap;
 }
-.recent-batch .sub {
-  font-size: 11px;
-  color: var(--vf-ink-muted);
+
+/* 加载态 */
+.loading-state {
+  display: flex;
+  flex-direction: column;
 }
-.recent-batch .tag {
-  cursor: default;
-}
-.result-header {
+
+/* 结果 */
+.result-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
 }
-.meta {
-  color: var(--vf-ink-muted);
-  font-size: 12px;
-}
-.canvas-wrap {
-  background: var(--vf-bg);
-  border: 1px solid var(--vf-border);
-  border-radius: var(--vf-radius);
-  overflow: hidden;
-  margin-bottom: 12px;
-}
+
 .preview {
+  position: relative;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  margin-bottom: var(--sp-4);
+  min-height: 200px;
+}
+.preview__img {
   display: block;
   width: 100%;
-  height: auto;
-  max-height: 480px;
+  max-height: 520px;
   object-fit: contain;
+  animation: fade-in var(--t-base) var(--ease-decelerate);
 }
-.loading {
-  text-align: center;
-  padding: 32px;
-  color: var(--vf-ink-muted);
+.preview__empty {
+  display: grid;
+  place-items: center;
+  min-height: 200px;
+  color: var(--text-tertiary);
 }
-.detail {
-  margin-top: 12px;
+
+/* 类别分布 */
+.class-dist {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border-default);
+}
+.class-dist__title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-secondary);
+  margin-bottom: var(--sp-3);
+}
+.class-dist__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.class-dist__item {
+  display: grid;
+  grid-template-columns: 100px 1fr 60px;
+  gap: var(--sp-3);
+  align-items: center;
+}
+.class-dist__name {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.class-dist__bar {
+  height: 6px;
+  background: var(--bg-subtle);
+  border-radius: var(--r-full);
+  overflow: hidden;
+}
+.class-dist__fill {
+  height: 100%;
+  background: var(--c-primary-500);
+  border-radius: var(--r-full);
+  transition: width var(--t-slower) var(--ease-decelerate);
+}
+.class-dist__count {
+  text-align: right;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+/* 详情面板 */
+.detail-panel {
+  margin-top: var(--sp-4);
+  padding: var(--sp-4);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+}
+.detail-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-3);
+}
+.detail-panel__header h4 {
+  margin: 0;
+  font-size: var(--fs-md);
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-3);
+}
+.detail-item__label {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+  margin-bottom: 2px;
+}
+.detail-item__value {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+}
+
+/* chips */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  border-radius: var(--r-full);
+}
+.chip-primary  { color: var(--c-primary-700);  background: var(--c-primary-50); }
+.chip-success  { color: var(--c-success-600);  background: var(--c-success-50); }
+.chip-warning  { color: var(--c-warning-600);  background: var(--c-warning-50); }
+.chip-danger   { color: var(--c-danger-600);   background: var(--c-danger-50); }
+.chip-neutral  { color: var(--text-secondary);  background: var(--bg-subtle); }
+
+/* 转场 */
+.slide-enter-active, .slide-leave-active {
+  transition: all var(--t-base) var(--ease-standard);
+}
+.slide-enter-from, .slide-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+@media (max-width: 1000px) {
+  .grid { grid-template-columns: 1fr; }
+  .sidebar { position: static; }
 }
 </style>
