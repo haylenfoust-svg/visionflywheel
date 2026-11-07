@@ -10,6 +10,8 @@ backend/weights/*.onnx
 backend/weights/*.engine
 !backend/weights/.gitkeep
 !backend/weights/README.md
+# 测试残留的假权重（从 backend/ 运行 pytest 时会创建 backend/backend/）
+backend/backend/
 
 # ===== Python =====
 __pycache__/
