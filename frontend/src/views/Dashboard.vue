@@ -7,9 +7,12 @@ import { healthDetail, overview } from '@/api/stats'
 import type { DashboardOverview, HealthDetail } from '@/api/stats'
 import AppCard from '@/components/AppCard.vue'
 import BarChart from '@/components/BarChart.vue'
+import DonutChart from '@/components/DonutChart.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import LineChart from '@/components/LineChart.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import SectionHeader from '@/components/SectionHeader.vue'
+import Sparkline from '@/components/Sparkline.vue'
 import StatCard from '@/components/StatCard.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -20,9 +23,86 @@ const auth = useAuthStore()
 const stats = ref<DashboardOverview | null>(null)
 const health = ref<HealthDetail | null>(null)
 const loading = ref(true)
+const range = ref<'7d' | '14d' | '30d'>('14d')
 
 const displayName = computed(() => auth.user?.display_name || auth.user?.username || '')
+const isYolo = computed(() => (health.value?.detector_mode ?? '') === 'yolo')
 
+// ---- KPI cards with trend deltas ----
+const kpis = computed(() => {
+  if (!stats.value) return []
+  const t = stats.value.totals
+  const today = stats.value.today
+  return [
+    {
+      key: 'detections',
+      label: '识别目标',
+      value: t.detections,
+      delta: today.detections,
+      deltaSuffix: '今日',
+      accent: 'primary' as const,
+      icon: '◎',
+      hint: '累计检测框数量',
+      path: '/detect',
+    },
+    {
+      key: 'corrections',
+      label: '校正动作',
+      value: t.corrections,
+      delta: today.corrections,
+      deltaSuffix: '今日',
+      accent: 'success' as const,
+      icon: '✎',
+      hint: '飞轮动力源',
+      path: '/annotate',
+    },
+    {
+      key: 'datasets',
+      label: '训练集版本',
+      value: t.datasets,
+      delta: null,
+      deltaSuffix: '',
+      accent: 'neutral' as const,
+      icon: '◈',
+      hint: '导出的 YOLO 数据集',
+      path: '/dataset',
+    },
+    {
+      key: 'weights',
+      label: '模型权重',
+      value: t.weights,
+      delta: null,
+      deltaSuffix: '',
+      accent: 'neutral' as const,
+      icon: '❖',
+      hint: '含训练产出',
+      path: '/dataset',
+    },
+    {
+      key: 'tickets',
+      label: '待处理工单',
+      value: t.open_tickets,
+      delta: null,
+      deltaSuffix: '',
+      accent: 'warning' as const,
+      icon: '⚑',
+      hint: '需管理员跟进',
+      path: '/admin',
+    },
+    {
+      key: 'confidence',
+      label: '平均置信度',
+      value: `${(stats.value.avg_confidence * 100).toFixed(1)}%`,
+      delta: null,
+      deltaSuffix: '',
+      accent: 'neutral' as const,
+      icon: '◔',
+      hint: '全量检测均值',
+    },
+  ]
+})
+
+// ---- Charts data ----
 const classChartData = computed(() =>
   (stats.value?.by_class ?? []).map((c) => ({
     label: c.class_name_zh || c.class_name,
@@ -34,29 +114,63 @@ const actionChartData = computed(() =>
   Object.entries(stats.value?.by_action ?? {}).map(([label, value]) => ({ label, value })),
 )
 
-const detectTrendData = computed(() =>
-  (stats.value?.per_day ?? []).map((d) => ({ label: d.date.slice(5), value: d.count })),
-)
-
-const corrTrendData = computed(() =>
-  (stats.value?.corr_per_day ?? []).map((d) => ({ label: d.date.slice(5), value: d.count })),
-)
-
-const statusRows = computed(() => {
+const statusDonut = computed(() => {
   const s = stats.value?.by_status ?? {}
-  const total = Object.values(s).reduce((a, b) => a + b, 0) || 1
-  return Object.entries(s).map(([label, value]) => ({
-    label,
-    value,
-    percent: Math.round((value / total) * 100),
+  const labelMap: Record<string, string> = {
+    pending: '待校正',
+    corrected: '已校正',
+    rejected: '已否决',
+  }
+  const colorMap: Record<string, string> = {
+    pending: '#f59e0b',
+    corrected: '#10b981',
+    rejected: '#ef4444',
+  }
+  return Object.entries(s).map(([k, v]) => ({
+    label: labelMap[k] ?? k,
+    value: v,
+    color: colorMap[k],
   }))
 })
 
-const statusLabel: Record<string, string> = {
-  pending: '待校正',
-  corrected: '已校正',
-  rejected: '已否决',
+const detectTrendData = computed(() => {
+  const all = stats.value?.per_day ?? []
+  return all.slice(-getRangeDays()).map((d) => ({ label: d.date.slice(5), value: d.count }))
+})
+
+const corrTrendData = computed(() => {
+  const all = stats.value?.corr_per_day ?? []
+  return all.slice(-getRangeDays()).map((d) => ({ label: d.date.slice(5), value: d.count }))
+})
+
+const detectSparkline = computed(() => detectTrendData.value.map((d) => d.value))
+
+function getRangeDays(): number {
+  return range.value === '7d' ? 7 : range.value === '30d' ? 30 : 14
 }
+
+// ---- Status rows for the list ----
+const statusRows = computed(() => {
+  const s = stats.value?.by_status ?? {}
+  const total = Object.values(s).reduce((a, b) => a + b, 0) || 1
+  const labelMap: Record<string, string> = {
+    pending: '待校正',
+    corrected: '已校正',
+    rejected: '已否决',
+  }
+  const colorMap: Record<string, string> = {
+    pending: 'var(--c-warning-500)',
+    corrected: 'var(--c-success-500)',
+    rejected: 'var(--c-danger-500)',
+  }
+  return Object.entries(s).map(([label, value]) => ({
+    label: labelMap[label] ?? label,
+    value,
+    percent: Math.round((value / total) * 100),
+    color: colorMap[label] ?? 'var(--c-neutral-400)',
+  }))
+})
+
 const actionLabel: Record<string, string> = {
   confirm: '确认',
   relabel: '改标签',
@@ -65,15 +179,6 @@ const actionLabel: Record<string, string> = {
   add: '补框',
   undo: '撤销',
 }
-
-const statusColor: Record<string, string> = {
-  pending: 'var(--c-warning-500)',
-  corrected: 'var(--c-success-500)',
-  rejected: 'var(--c-danger-500)',
-}
-
-const detectorMode = computed(() => health.value?.detector_mode ?? '')
-const isYolo = computed(() => detectorMode.value === 'yolo')
 
 async function refresh() {
   loading.value = true
@@ -97,14 +202,13 @@ onMounted(refresh)
 
 <template>
   <div class="page">
-    <!-- Hero 区 -->
     <PageHeader
       :title="`欢迎回来，${displayName}`"
       subtitle="识别 · 校正 · 导出 · 训练 · 切换——五步飞轮。每一次修正都让模型更强。"
     >
       <template #actions>
         <el-tag :type="isYolo ? 'success' : 'warning'" size="large" effect="light" round>
-          {{ isYolo ? 'YOLO 引擎' : '降级检测器' }}
+          {{ isYolo ? '⚡ YOLO 引擎' : '🛡 降级检测器' }}
         </el-tag>
         <el-button type="primary" size="large" @click="go('/detect')">
           开始识别
@@ -113,7 +217,25 @@ onMounted(refresh)
       </template>
     </PageHeader>
 
-    <!-- 骨架屏（加载中） -->
+    <!-- 时间范围 -->
+    <div class="range-bar">
+      <div class="range-tabs">
+        <button
+          v-for="r in ([['7d', '近 7 天'], ['14d', '近 14 天'], ['30d', '近 30 天']] as const)"
+          :key="r[0]"
+          class="range-tab"
+          :class="{ 'is-active': range === r[0] }"
+          @click="range = r[0]"
+        >
+          {{ r[1] }}
+        </button>
+      </div>
+      <div class="range-meta">
+        更新于 {{ new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }}
+      </div>
+    </div>
+
+    <!-- KPI 卡 -->
     <div v-if="loading" class="stats-grid">
       <div v-for="i in 6" :key="i" class="stat-skeleton">
         <SkeletonBlock :lines="1" height="14px" width="60%" />
@@ -121,88 +243,95 @@ onMounted(refresh)
         <SkeletonBlock :lines="1" height="12px" width="50%" />
       </div>
     </div>
-
-    <!-- 统计卡 -->
     <div v-else-if="stats" class="stats-grid">
       <StatCard
-        label="识别目标"
-        :value="stats.totals.detections"
-        :trend="stats.today.detections"
-        trend-suffix=" 今日"
-        accent="primary"
-        icon="◎"
-        clickable
-        @click="go('/detect')"
-      />
-      <StatCard
-        label="校正动作"
-        :value="stats.totals.corrections"
-        :trend="stats.today.corrections"
-        trend-suffix=" 今日"
-        accent="success"
-        icon="✎"
-        clickable
-        @click="go('/annotate')"
-      />
-      <StatCard
-        label="训练集版本"
-        :value="stats.totals.datasets"
-        accent="neutral"
-        icon="◈"
-        clickable
-        hint="导出的 YOLO 数据集"
-        @click="go('/dataset')"
-      />
-      <StatCard
-        label="模型权重"
-        :value="stats.totals.weights"
-        accent="neutral"
-        icon="❖"
-        clickable
-        hint="含训练产出"
-        @click="go('/dataset')"
-      />
-      <StatCard
-        label="待处理工单"
-        :value="stats.totals.open_tickets"
-        accent="warning"
-        icon="⚑"
-        clickable
-        hint="需管理员跟进"
-        @click="go('/admin')"
-      />
-      <StatCard
-        label="平均置信度"
-        :value="`${(stats.avg_confidence * 100).toFixed(1)}%`"
-        accent="neutral"
-        icon="◔"
-        hint="全量检测均值"
+        v-for="k in kpis"
+        :key="k.key"
+        :label="k.label"
+        :value="k.value"
+        :trend="k.delta"
+        :trend-suffix="k.deltaSuffix"
+        :accent="k.accent"
+        :icon="k.icon"
+        :hint="k.hint"
+        :clickable="Boolean(k.path)"
+        @click="k.path && go(k.path)"
       />
     </div>
 
+    <!-- 主图表区 -->
     <template v-if="stats">
-      <!-- 图表区 -->
-      <div class="chart-grid">
-        <AppCard title="类别分布" subtitle="Top 10 · 按检测次数" hoverable>
-          <BarChart :data="classChartData" color="var(--c-primary-500)" />
+      <div class="main-grid">
+        <!-- 识别趋势（大图） -->
+        <AppCard hoverable class="chart-lg">
+          <template #header>
+            <SectionHeader
+              title="识别趋势"
+              :description="`近 ${getRangeDays()} 天检测数量`"
+            />
+          </template>
+          <div class="chart-lg__body">
+            <LineChart
+              :data="detectTrendData"
+              color="var(--c-primary-500)"
+              fill-color="rgba(99, 102, 241, 0.12)"
+              :height="240"
+            />
+            <div class="chart-lg__spark">
+              <span class="chart-lg__spark-label">趋势</span>
+              <Sparkline :data="detectSparkline" color="var(--c-primary-500)" :width="120" :height="32" />
+            </div>
+          </div>
         </AppCard>
 
-        <AppCard title="校正动作" subtitle="飞轮动力源 · 累计" hoverable>
-          <BarChart :data="actionChartData" color="var(--c-success-500)" />
-        </AppCard>
-
-        <AppCard title="识别趋势" subtitle="近 14 天" hoverable>
-          <BarChart :data="detectTrendData" color="var(--c-warning-500)" />
-        </AppCard>
-
-        <AppCard title="校正趋势" subtitle="近 14 天" hoverable>
-          <BarChart :data="corrTrendData" color="var(--c-primary-400)" />
+        <!-- 状态占比（环图） -->
+        <AppCard hoverable class="chart-sm">
+          <template #header>
+            <SectionHeader title="状态占比" description="按检测状态分布" />
+          </template>
+          <DonutChart
+            :data="statusDonut"
+            :size="200"
+            :thickness="22"
+            center-label="检测总数"
+          />
         </AppCard>
       </div>
 
-      <!-- 状态分布 + 最近活动 -->
+      <div class="chart-grid">
+        <AppCard hoverable>
+          <template #header>
+            <SectionHeader title="校正趋势" description="近两周动作次数" />
+          </template>
+          <LineChart
+            :data="corrTrendData"
+            color="var(--c-success-500)"
+            fill-color="rgba(16, 185, 129, 0.12)"
+            :height="200"
+          />
+        </AppCard>
+
+        <AppCard hoverable>
+          <template #header>
+            <SectionHeader title="类别分布" subtitle="Top 10 · 按检测次数" />
+          </template>
+          <BarChart :data="classChartData" color="var(--c-primary-500)" :height="200" />
+        </AppCard>
+
+        <AppCard hoverable>
+          <template #header>
+            <SectionHeader title="校正动作" subtitle="飞轮动力源 · 累计" />
+          </template>
+          <BarChart :data="actionChartData" color="var(--c-success-500)" :height="200" />
+        </AppCard>
+      </div>
+
+      <!-- 状态分布 + 系统状态 -->
       <div class="lower-grid">
-        <AppCard title="检测状态分布">
+        <AppCard>
+          <template #header>
+            <SectionHeader title="检测状态" description="按状态逐条" />
+          </template>
           <div class="status-list">
             <div
               v-for="(row, i) in statusRows"
@@ -211,18 +340,15 @@ onMounted(refresh)
               :style="{ animationDelay: `${i * 80}ms` }"
             >
               <span class="status-label">
-                <span
-                  class="status-dot"
-                  :style="{ background: statusColor[row.label] ?? 'var(--c-neutral-400)' }"
-                />
-                {{ statusLabel[row.label] ?? row.label }}
+                <span class="status-dot" :style="{ background: row.color }" />
+                {{ row.label }}
               </span>
               <div class="status-track">
                 <div
                   class="status-fill"
                   :style="{
                     width: `${row.percent}%`,
-                    background: statusColor[row.label] ?? 'var(--c-neutral-400)',
+                    background: row.color,
                     transitionDelay: `${i * 80}ms`,
                   }"
                 />
@@ -239,115 +365,128 @@ onMounted(refresh)
               @action="go('/detect')"
             />
           </div>
-
-          <template v-if="health">
-            <SectionHeader
-              title="系统状态"
-              description="运行时元信息"
-              class="system-header"
-            />
-            <div class="system-grid">
-              <div class="system-item">
-                <div class="system-item__label">版本</div>
-                <div class="system-item__value mono">{{ health.version }}</div>
-              </div>
-              <div class="system-item">
-                <div class="system-item__label">数据库</div>
-                <div class="system-item__value">
-                  <span class="chip" :class="health.db === 'ok' ? 'chip-success' : 'chip-danger'">
-                    {{ health.db }}
-                  </span>
-                </div>
-              </div>
-              <div class="system-item">
-                <div class="system-item__label">检测器</div>
-                <div class="system-item__value">
-                  <span class="chip" :class="isYolo ? 'chip-success' : 'chip-warning'">
-                    {{ health.detector_mode }}
-                  </span>
-                </div>
-              </div>
-              <div class="system-item">
-                <div class="system-item__label">用户</div>
-                <div class="system-item__value num">{{ health.user_count }}</div>
-              </div>
-            </div>
-          </template>
         </AppCard>
 
-        <div class="recent-stack">
-          <AppCard title="最近识别" hoverable>
-            <template #actions>
-              <el-button size="small" text type="primary" @click="go('/detect')">查看全部</el-button>
-            </template>
-            <el-table
-              v-if="stats.recent_tasks.length"
-              :data="stats.recent_tasks"
-              size="small"
-              :show-header="true"
-              class="recent-table"
-            >
-              <el-table-column prop="id" label="#" width="60" />
-              <el-table-column label="类型" width="90">
-                <template #default="{ row }">
-                  <span class="chip chip-neutral">{{ row.type }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column label="状态" width="100">
-                <template #default="{ row }">
-                  <span
-                    class="chip"
-                    :class="row.status === 'done' ? 'chip-success' : row.status === 'failed' ? 'chip-danger' : 'chip-neutral'"
-                  >
-                    {{ row.status }}
-                  </span>
-                </template>
-              </el-table-column>
-              <el-table-column prop="detections" label="目标" width="80" align="right" />
-            </el-table>
-            <EmptyState
-              v-else
-              title="还没有识别记录"
-              description="上传第一张图片试试"
-              action-text="去上传"
-              icon="◎"
-              size="sm"
-              @action="go('/detect')"
-            />
-          </AppCard>
+        <AppCard>
+          <template #header>
+            <SectionHeader title="系统状态" description="运行时元信息" />
+          </template>
+          <div v-if="health" class="system-grid">
+            <div class="system-item">
+              <div class="system-item__label">版本</div>
+              <div class="system-item__value mono">{{ health.version }}</div>
+            </div>
+            <div class="system-item">
+              <div class="system-item__label">数据库</div>
+              <div class="system-item__value">
+                <span class="chip" :class="health.db === 'ok' ? 'chip-success' : 'chip-danger'">
+                  {{ health.db }}
+                </span>
+              </div>
+            </div>
+            <div class="system-item">
+              <div class="system-item__label">检测器</div>
+              <div class="system-item__value">
+                <span class="chip" :class="isYolo ? 'chip-success' : 'chip-warning'">
+                  {{ health.detector_mode }}
+                </span>
+              </div>
+            </div>
+            <div class="system-item">
+              <div class="system-item__label">用户</div>
+              <div class="system-item__value num">{{ health.user_count }}</div>
+            </div>
+            <div class="system-item">
+              <div class="system-item__label">降级兜底</div>
+              <div class="system-item__value">
+                <span class="chip" :class="health.fallback_enabled ? 'chip-success' : 'chip-neutral'">
+                  {{ health.fallback_enabled ? '启用' : '禁用' }}
+                </span>
+              </div>
+            </div>
+            <div class="system-item">
+              <div class="system-item__label">数据库类型</div>
+              <div class="system-item__value mono">{{ health.database_url_scheme }}</div>
+            </div>
+          </div>
+        </AppCard>
+      </div>
 
-          <AppCard title="最近校正" hoverable>
-            <template #actions>
-              <el-button size="small" text type="primary" @click="go('/annotate')">进入工作台</el-button>
-            </template>
-            <el-table
-              v-if="stats.recent_corrections.length"
-              :data="stats.recent_corrections"
-              size="small"
-              class="recent-table"
-            >
-              <el-table-column prop="id" label="#" width="60" />
-              <el-table-column label="动作" width="110">
-                <template #default="{ row }">
-                  <span class="chip" :class="row.action === 'undo' ? 'chip-warning' : 'chip-primary'">
-                    {{ actionLabel[row.action] ?? row.action }}
-                  </span>
-                </template>
-              </el-table-column>
-              <el-table-column prop="detection_id" label="检测" width="80" align="right" />
-              <el-table-column prop="operator" label="操作人" min-width="100" />
-            </el-table>
-            <EmptyState
-              v-else
-              title="还没有校正记录"
-              description="校正是飞轮的动力源"
-              action-text="去校正"
-              icon="✎"
-              size="sm"
-              @action="go('/annotate')"
-            />
-          </AppCard>
-        </div>
+      <!-- 最近活动 -->
+      <div class="activity-grid">
+        <AppCard hoverable>
+          <template #header>
+            <SectionHeader title="最近识别" />
+          </template>
+          <template #actions>
+            <el-button size="small" text type="primary" @click="go('/detect')">查看全部 →</el-button>
+          </template>
+          <el-table v-if="stats.recent_tasks.length" :data="stats.recent_tasks" size="small" :show-header="true">
+            <el-table-column prop="id" label="#" width="60" />
+            <el-table-column label="类型" width="90">
+              <template #default="{ row }">
+                <span class="chip chip-neutral">{{ row.type }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="100">
+              <template #default="{ row }">
+                <span
+                  class="chip"
+                  :class="row.status === 'done' ? 'chip-success' : row.status === 'failed' ? 'chip-danger' : 'chip-neutral'"
+                >
+                  {{ row.status }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="detections" label="目标" width="80" align="right" />
+            <el-table-column label="引擎" width="100">
+              <template #default="{ row }">
+                <span class="chip" :class="row.detector_mode === 'yolo' ? 'chip-success' : 'chip-warning'">
+                  {{ row.detector_mode }}
+                </span>
+              </template>
+            </el-table-column>
+          </el-table>
+          <EmptyState
+            v-else
+            title="还没有识别记录"
+            description="上传第一张图片试试"
+            action-text="去上传"
+            icon="◎"
+            size="sm"
+            @action="go('/detect')"
+          />
+        </AppCard>
+
+        <AppCard hoverable>
+          <template #header>
+            <SectionHeader title="最近校正" />
+          </template>
+          <template #actions>
+            <el-button size="small" text type="primary" @click="go('/annotate')">进入工作台 →</el-button>
+          </template>
+          <el-table v-if="stats.recent_corrections.length" :data="stats.recent_corrections" size="small">
+            <el-table-column prop="id" label="#" width="60" />
+            <el-table-column label="动作" width="110">
+              <template #default="{ row }">
+                <span class="chip" :class="row.action === 'undo' ? 'chip-warning' : 'chip-primary'">
+                  {{ actionLabel[row.action] ?? row.action }}
+                </span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="detection_id" label="检测" width="80" align="right" />
+            <el-table-column prop="operator" label="操作人" min-width="100" />
+          </el-table>
+          <EmptyState
+            v-else
+            title="还没有校正记录"
+            description="校正是飞轮的动力源"
+            action-text="去校正"
+            icon="✎"
+            size="sm"
+            @action="go('/annotate')"
+          />
+        </AppCard>
       </div>
 
       <!-- 快捷入口 -->
@@ -389,7 +528,7 @@ onMounted(refresh)
             <span class="quick-item__icon">⚙</span>
             <div>
               <div class="quick-item__title">系统管理</div>
-              <div class="quick-item__desc">用户 / 配置 / 审计</div>
+              <div class="quick-item__desc">用户 / 角色 / 权限</div>
             </div>
             <span class="quick-item__arrow">→</span>
           </button>
@@ -406,11 +545,50 @@ onMounted(refresh)
 }
 .el-button:hover .btn-arrow { transform: translateX(3px); }
 
+/* 时间范围 */
+.range-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-4);
+}
+.range-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-subtle);
+  border-radius: var(--r-md);
+}
+.range-tab {
+  padding: 6px var(--sp-3);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease-standard);
+}
+.range-tab:hover {
+  color: var(--text-primary);
+}
+.range-tab.is-active {
+  background: var(--bg-surface);
+  color: var(--text-accent);
+  font-weight: var(--fw-medium);
+  box-shadow: var(--shadow-sm);
+}
+.range-meta {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+/* KPI 网格 */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--sp-3);
-  margin-bottom: var(--sp-6);
+  margin-bottom: var(--sp-3);
 }
 .stat-skeleton {
   display: flex;
@@ -422,20 +600,55 @@ onMounted(refresh)
   border-radius: var(--r-lg);
 }
 
+/* 主图区（一大一小） */
+.main-grid {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.chart-lg__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.chart-lg__spark {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border-default);
+}
+.chart-lg__spark-label {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+
+/* 三图网格 */
 .chart-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: var(--sp-3);
   margin-bottom: var(--sp-3);
 }
 
+/* 下方两栏 */
 .lower-grid {
   display: grid;
-  grid-template-columns: 1fr 1.25fr;
+  grid-template-columns: 1fr 1fr;
   gap: var(--sp-3);
   margin-bottom: var(--sp-3);
 }
 
+/* 活动流 */
+.activity-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+/* 状态分布 */
 .status-list {
   display: flex;
   flex-direction: column;
@@ -474,16 +687,18 @@ onMounted(refresh)
   text-align: right;
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
-  color: var(--text-primary);
 }
 
-.system-header {
-  margin-top: var(--sp-6);
-}
+/* 系统状态 */
 .system-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: var(--sp-3);
+}
+.system-item {
+  padding: var(--sp-3);
+  background: var(--bg-subtle);
+  border-radius: var(--r-md);
 }
 .system-item__label {
   font-size: var(--fs-xs);
@@ -495,6 +710,7 @@ onMounted(refresh)
   font-weight: var(--fw-medium);
 }
 
+/* chips */
 .chip {
   display: inline-flex;
   align-items: center;
@@ -502,7 +718,6 @@ onMounted(refresh)
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
   border-radius: var(--r-full);
-  letter-spacing: 0.01em;
 }
 .chip-primary  { color: var(--c-primary-700);  background: var(--c-primary-50); }
 .chip-success  { color: var(--c-success-600);  background: var(--c-success-50); }
@@ -510,15 +725,7 @@ onMounted(refresh)
 .chip-danger   { color: var(--c-danger-600);   background: var(--c-danger-50); }
 .chip-neutral  { color: var(--text-secondary);  background: var(--bg-subtle); }
 
-.recent-stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
-.recent-table {
-  margin: 0 calc(-1 * var(--sp-2));
-}
-
+/* 快捷入口 */
 .quick-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -570,7 +777,9 @@ onMounted(refresh)
   color: var(--text-accent);
 }
 
-@media (max-width: 1000px) {
-  .lower-grid { grid-template-columns: 1fr; }
+@media (max-width: 1100px) {
+  .main-grid, .lower-grid, .activity-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -51,6 +51,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/Admin.vue'),
         meta: { title: '系统管理', adminOnly: true },
       },
+      {
+        path: 'rbac',
+        name: 'rbac',
+        component: () => import('@/views/Rbac.vue'),
+        meta: { title: '身份与权限', adminOnly: true },
+      },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/dashboard' },

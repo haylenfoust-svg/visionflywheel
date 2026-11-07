@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api import auth, batch, chat, corrections, dataset, stats, system, tasks
+from app.api import auth, batch, chat, corrections, dataset, rbac, stats, system, tasks
 from app.core.envelope import EnvelopeRoute
 
 api_router = APIRouter(prefix="/api", route_class=EnvelopeRoute)
@@ -14,3 +14,4 @@ api_router.include_router(corrections.router)
 api_router.include_router(dataset.router)
 api_router.include_router(stats.router)
 api_router.include_router(chat.router)
+api_router.include_router(rbac.router)

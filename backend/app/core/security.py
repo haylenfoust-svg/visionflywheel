@@ -18,7 +18,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(*, subject: str, role: str, expires_minutes: int | None = None) -> str:
+def create_access_token(
+    *,
+    subject: str,
+    role: str,
+    expires_minutes: int | None = None,
+    session_id: str | None = None,
+    jti: str | None = None,
+) -> str:
     settings = get_settings()
     now = datetime.now(timezone.utc)
     expire_delta = timedelta(minutes=expires_minutes or settings.access_token_expire_minutes)
@@ -28,6 +35,10 @@ def create_access_token(*, subject: str, role: str, expires_minutes: int | None 
         "iat": int(now.timestamp()),
         "exp": int((now + expire_delta).timestamp()),
     }
+    if session_id is not None:
+        payload["sid"] = session_id
+    if jti is not None:
+        payload["jti"] = jti
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 

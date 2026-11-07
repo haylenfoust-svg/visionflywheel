@@ -23,7 +23,10 @@ const navItems = computed(() => {
     { path: '/dataset', icon: '◈', label: '数据与权重' },
     { path: '/chat', icon: '✦', label: '智能分析' },
   ]
-  if (auth.isAdmin) base.push({ path: '/admin', icon: '⚙', label: '系统管理' })
+  if (auth.isAdmin) {
+    base.push({ path: '/admin', icon: '⚙', label: '系统管理' })
+    base.push({ path: '/rbac', icon: '🔑', label: '身份与权限' })
+  }
   return base
 })
 

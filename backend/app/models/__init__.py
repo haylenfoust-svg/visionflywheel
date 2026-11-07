@@ -7,6 +7,18 @@ from app.models.correction import Correction
 from app.models.dataset import DatasetExport, DatasetSample, TrainingRun
 from app.models.detection import Detection
 from app.models.feedback import FeedbackTicket
+from app.models.rbac import (
+    AccountLock,
+    AuthSession,
+    LoginAttempt,
+    Organization,
+    Permission,
+    Role,
+    RolePermission,
+    Team,
+    TeamMember,
+    UserRole,
+)
 from app.models.task import Task
 from app.models.user import User
 from app.models.weight import Weight
@@ -25,4 +37,14 @@ __all__ = [
     "DatasetExport",
     "DatasetSample",
     "TrainingRun",
+    "Organization",
+    "Team",
+    "TeamMember",
+    "Role",
+    "Permission",
+    "RolePermission",
+    "UserRole",
+    "AuthSession",
+    "LoginAttempt",
+    "AccountLock",
 ]
