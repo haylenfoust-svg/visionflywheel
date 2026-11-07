@@ -14,8 +14,10 @@ import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import StatCard from '@/components/StatCard.vue'
 import { useAuthStore } from '@/stores/auth'
+import { usePermissions } from '@/composables/usePermissions'
 
 const auth = useAuthStore()
+const { can } = usePermissions()
 const activeTab = ref<'system' | 'users' | 'config' | 'audit' | 'feedback'>('system')
 const loading = ref(false)
 
@@ -269,7 +271,7 @@ onMounted(refresh)
       <el-tab-pane :label="`用户 (${users.length})`" name="users">
         <AppCard>
           <template #actions>
-            <el-button type="primary" @click="openCreateUser">+ 新建用户</el-button>
+            <el-button v-if="can('user.write')" type="primary" @click="openCreateUser">+ 新建用户</el-button>
           </template>
           <el-table :data="users" size="default">
             <el-table-column prop="id" label="#" width="80" />

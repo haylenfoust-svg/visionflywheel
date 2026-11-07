@@ -13,6 +13,7 @@ from app.schemas.auth import UserOut
 from app.schemas.config import AuditOut
 from app.services import stats_service
 from app.services.permission_service import require_permission
+from app.services.quality_service import quality_metrics
 
 router = APIRouter(tags=["stats"], route_class=EnvelopeRoute)
 
@@ -20,6 +21,17 @@ router = APIRouter(tags=["stats"], route_class=EnvelopeRoute)
 @router.get("/stats/overview")
 def overview(user: CurrentUser, db: Session = Depends(get_db), _perm: object = Depends(require_permission("task.read"))) -> dict:
     return stats_service.dashboard_overview(db)
+
+
+@router.get("/stats/quality")
+def quality(
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+    days: int = 30,
+    _perm: object = Depends(require_permission("detection.read")),
+) -> dict:
+    """Flywheel quality metrics: FP rate, miss proxy, correction rate, trend."""
+    return quality_metrics(db, user, days=days)
 
 
 @router.get("/stats/health-detail")

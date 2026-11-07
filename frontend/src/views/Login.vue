@@ -4,10 +4,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { useAuthStore } from '@/stores/auth'
+import { usePermissionStore } from '@/stores/permission'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
+const perm = usePermissionStore()
 
 const form = reactive({ username: '', password: '' })
 const loading = ref(false)
@@ -24,6 +26,7 @@ async function onSubmit() {
   loading.value = true
   try {
     await auth.login(form.username.trim(), form.password)
+    await perm.load(true)  // load the RBAC permission set alongside the token
     ElMessage.success('登录成功，正在跳转…')
     const redirect = (route.query.redirect as string) ?? '/dashboard'
     router.replace(redirect)

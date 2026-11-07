@@ -11,10 +11,12 @@ import ImageAnnotator from '@/components/ImageAnnotator.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import UploadDrop from '@/components/UploadDrop.vue'
 import { useAuthStore } from '@/stores/auth'
+import { usePermissions } from '@/composables/usePermissions'
 import type { BBox, Detection, Task } from '@/types/detection'
 import type { CorrectionRow, Feedback } from '@/api/corrections'
 
 const auth = useAuthStore()
+const { can } = usePermissions()
 
 const tasks = ref<Task[]>([])
 const currentTaskId = ref<number | null>(null)
@@ -268,10 +270,7 @@ watch(currentTaskId, () => {
     >
       <template #actions>
         <el-button
-          type="warning"
-          plain
-          size="large"
-          :loading="undoLoading"
+v-if="can('detection.correct')" type="warning" plain size="large" :loading="undoLoading"
           :disabled="!detections.length"
           @click="onUndo"
         >

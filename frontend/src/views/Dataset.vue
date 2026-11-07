@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import {
   cancelTraining,
+  compareWeights,
   datasetDownload,
   datasetExport,
   datasetHoldout,
@@ -13,16 +14,19 @@ import {
   getTraining,
   listTraining,
   listWeights,
+  rollbackWeight,
   setDefaultWeight,
   startTraining,
   uploadWeight,
+  weightHistory,
 } from '@/api/dataset'
-import type { DatasetExportRow, DatasetPending, DatasetSample, TrainRun, Weight } from '@/api/dataset'
+import type { DatasetExportRow, DatasetPending, DatasetSample, TrainRun, Weight, WeightComparison, WeightSnapshot } from '@/api/dataset'
 import AppCard from '@/components/AppCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import StatCard from '@/components/StatCard.vue'
+import { usePermissions } from '@/composables/usePermissions'
 
 const pending = ref<DatasetPending | null>(null)
 const exports = ref<DatasetExportRow[]>([])
@@ -30,6 +34,7 @@ const holdout = ref<DatasetSample[]>([])
 const weights = ref<Weight[]>([])
 const runs = ref<TrainRun[]>([])
 const loading = ref(true)
+const { can } = usePermissions()
 const activeTab = ref<'dataset' | 'weights' | 'train'>('dataset')
 
 const exportForm = reactive({ name: '', valRatio: 0.2 })
@@ -43,6 +48,52 @@ const trainForm = reactive({
 
 const canExport = computed(() => (pending.value?.pending_images ?? 0) > 0)
 const defaultWeight = computed(() => weights.value.find((w) => w.is_default))
+
+// ---- Model comparison (AI-1) ----
+const compareOpen = ref(false)
+const compareBase = ref<number | null>(null)
+const compareTarget = ref<number | null>(null)
+const comparison = ref<WeightComparison | null>(null)
+const history = ref<WeightSnapshot[]>([])
+const compareLoading = ref(false)
+
+async function openCompare() {
+  compareOpen.value = true
+  history.value = await weightHistory().catch(() => [])
+  if (history.value.length >= 2) {
+    compareBase.value = history.value[0].id
+    compareTarget.value = history.value[1].id
+    await runCompare()
+  }
+}
+
+async function runCompare() {
+  if (!compareBase.value || !compareTarget.value) return
+  compareLoading.value = true
+  try {
+    comparison.value = await compareWeights(compareBase.value, compareTarget.value)
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '对比失败')
+  } finally {
+    compareLoading.value = false
+  }
+}
+
+async function onRollback(id: number) {
+  try {
+    await ElMessageBox.confirm('回滚到该权重？（热切换，不重启）', '⚠ 确认', {
+      type: 'warning',
+      confirmButtonText: '回滚',
+      cancelButtonText: '取消',
+    })
+    const r = await rollbackWeight(id)
+    ElMessage.success(`✓ 已回滚到 ${r.filename}（${r.reloaded_in_ms.toFixed(0)}ms）`)
+    await refresh()
+    compareOpen.value = false
+  } catch {
+    /* cancelled */
+  }
+}
 const trainingCount = computed(() => runs.value.filter((r) => r.status === 'running' || r.status === 'pending').length)
 
 const statusType: Record<string, 'chip-success' | 'chip-warning' | 'chip-danger' | 'chip-primary' | 'chip-neutral'> = {
@@ -203,10 +254,10 @@ onMounted(refresh)
       :breadcrumb="[{ text: '控制台', to: '/dashboard' }, { text: '数据与权重' }]"
     >
       <template #actions>
-        <el-button type="primary" size="large" :disabled="!canExport" @click="onExport">
+        <el-button v-if="can('dataset.export')" type="primary" size="large" :disabled="!canExport" @click="onExport">
           ◈ 导出训练集
         </el-button>
-        <el-button size="large" @click="pickWeight">❖ 上传权重</el-button>
+        <el-button v-if="can('weight.write')" size="large" @click="pickWeight">❖ 上传权重</el-button>
       </template>
     </PageHeader>
 
@@ -269,7 +320,7 @@ onMounted(refresh)
                 style="width: 100%"
               />
             </div>
-            <el-button type="primary" size="large" :disabled="!canExport" @click="onExport">
+            <el-button v-if="can('dataset.export')" type="primary" size="large" :disabled="!canExport" @click="onExport">
               ◈ 导出训练集
             </el-button>
             <p v-if="!canExport" class="hint">没有待导出的校正样本。去「校正工作台」修正检测后再回来。</p>
@@ -346,7 +397,8 @@ onMounted(refresh)
       <el-tab-pane :label="`权重 (${weights.length})`" name="weights">
         <AppCard title="权重管理" subtitle="切换默认权重立即生效，无需重启">
           <template #actions>
-            <el-button type="primary" @click="pickWeight">❖ 上传 .pt 权重</el-button>
+            <el-button v-if="can('weight.write')" type="primary" @click="pickWeight">❖ 上传 .pt 权重</el-button>
+            <el-button @click="openCompare">⚖ 版本对比</el-button>
             <span v-if="defaultWeight" class="current-weight">
               当前默认：
               <code class="mono">{{ defaultWeight.filename }}</code>
@@ -444,7 +496,7 @@ onMounted(refresh)
                 <el-input-number v-model="trainForm.batch" :min="1" :max="256" size="large" style="width: 100%" />
               </div>
             </div>
-            <el-button type="primary" size="large" @click="onTrain">▶ 启动训练</el-button>
+            <el-button v-if="can('train.write')" type="primary" size="large" @click="onTrain">▶ 启动训练</el-button>
           </div>
         </AppCard>
 
@@ -508,6 +560,82 @@ onMounted(refresh)
         </AppCard>
       </el-tab-pane>
     </el-tabs>
+
+    <!-- 模型版本对比对话框 (AI-1) -->
+    <el-dialog v-model="compareOpen" title="⚖ 模型版本对比" width="720">
+      <div class="compare-form">
+        <div class="compare-picker">
+          <div class="field">
+            <label class="field-label">基准权重</label>
+            <el-select v-model="compareBase" size="large" style="width: 100%">
+              <el-option v-for="w in history" :key="w.id" :value="w.id" :label="`${w.filename} (id=${w.id})`" />
+            </el-select>
+          </div>
+          <div class="field">
+            <label class="field-label">对比权重</label>
+            <el-select v-model="compareTarget" size="large" style="width: 100%">
+              <el-option v-for="w in history" :key="w.id" :value="w.id" :label="`${w.filename} (id=${w.id})`" />
+            </el-select>
+          </div>
+          <el-button type="primary" :loading="compareLoading" @click="runCompare">对比</el-button>
+        </div>
+
+        <div v-if="comparison" class="compare-result">
+          <el-table :data="[comparison.base, comparison.target]" size="default">
+            <el-table-column label="属性" width="160">
+              <template #default="scope">
+                <div class="compare-label">{{ ['基准', '对比'][scope.$index] }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="filename" label="文件" min-width="200" />
+            <el-table-column label="holdout mAP" width="130" align="right">
+              <template #default="{ row }">
+                <span class="num">{{ row.holdout_map != null ? row.holdout_map.toFixed(4) : '—' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="dataset_version" label="训练集" min-width="180" />
+            <el-table-column prop="class_count" label="类别" width="80" align="right" />
+            <el-table-column label="状态" width="100">
+              <template #default="{ row }">
+                <span v-if="row.is_default" class="chip chip-success">默认</span>
+                <span v-else class="chip chip-neutral">备用</span>
+              </template>
+            </el-table-column>
+          </el-table>
+
+          <div class="compare-delta">
+            <div class="compare-delta__title">差异</div>
+            <div class="compare-delta__row">
+              <span>holdout mAP 变化：</span>
+              <span
+                v-if="comparison.delta.holdout_map != null"
+                class="num"
+                :class="comparison.delta.improved ? 'text-success' : comparison.delta.regressed ? 'text-danger' : ''"
+              >
+                {{ comparison.delta.holdout_map >= 0 ? '+' : '' }}{{ comparison.delta.holdout_map.toFixed(4) }}
+                {{ comparison.delta.improved ? '(改进)' : comparison.delta.regressed ? '(回退)' : '(持平)' }}
+              </span>
+              <span v-else class="text-subtle">无法比较</span>
+            </div>
+            <div class="compare-delta__row">
+              <span>同源训练集：</span>
+              <span>{{ comparison.delta.same_dataset ? '✓' : '✗' }}</span>
+            </div>
+            <div class="compare-delta__row">
+              <span>类别数一致：</span>
+              <span>{{ comparison.delta.same_classes ? '✓' : '✗' }}</span>
+            </div>
+          </div>
+
+          <div class="compare-actions">
+            <el-button type="warning" @click="onRollback(comparison.target.id)">⚠ 回滚到对比权重</el-button>
+            <el-button type="warning" plain @click="onRollback(comparison.base.id)">回滚到基准权重</el-button>
+          </div>
+        </div>
+
+        <el-empty v-else-if="!compareLoading && history.length < 2" description="至少需要 2 个权重才能对比" />
+      </div>
+    </el-dialog>
   </div>
 </template>
 

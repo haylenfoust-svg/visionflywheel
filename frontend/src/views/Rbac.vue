@@ -36,6 +36,7 @@ import type {
   UserRoleBinding,
 } from '@/api/rbac'
 import { createUser, listUsers, updateUser } from '@/api/auth'
+import { usePermissions } from '@/composables/usePermissions'
 import type { User } from '@/types'
 import AppCard from '@/components/AppCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -44,6 +45,7 @@ import StatCard from '@/components/StatCard.vue'
 import DataTable from '@/components/DataTable.vue'
 import type { Column } from '@/components/DataTable.vue'
 
+const { can } = usePermissions()
 const activeTab = ref<'users' | 'roles' | 'orgs' | 'teams' | 'sessions' | 'audit'>('users')
 const loading = ref(false)
 
@@ -449,7 +451,7 @@ onMounted(refresh)
       <el-tab-pane :label="`用户 (${users.length})`" name="users">
         <AppCard>
           <template #actions>
-            <el-button type="primary" @click="openCreateUser">+ 新建用户</el-button>
+            <el-button v-if="can('user.write')" type="primary" @click="openCreateUser">+ 新建用户</el-button>
           </template>
           <DataTable
             :rows="users"
@@ -491,7 +493,7 @@ onMounted(refresh)
       <el-tab-pane :label="`角色 (${roles.length})`" name="roles">
         <AppCard>
           <template #actions>
-            <el-button type="primary" @click="openCreateRole">+ 新建角色</el-button>
+            <el-button v-if="can('role.write')" type="primary" @click="openCreateRole">+ 新建角色</el-button>
           </template>
           <div class="role-grid">
             <div v-for="r in roles" :key="r.id" class="role-card">
@@ -551,7 +553,7 @@ onMounted(refresh)
       <el-tab-pane :label="`组织 (${orgs.length})`" name="orgs">
         <AppCard>
           <template #actions>
-            <el-button type="primary" @click="openCreateOrg">+ 新建组织</el-button>
+            <el-button v-if="can('org.write')" type="primary" @click="openCreateOrg">+ 新建组织</el-button>
           </template>
           <el-table v-if="orgs.length" :data="orgs" size="default">
             <el-table-column prop="id" label="#" width="80" />
@@ -585,7 +587,7 @@ onMounted(refresh)
       <el-tab-pane :label="`团队 (${teams.length})`" name="teams">
         <AppCard>
           <template #actions>
-            <el-button type="primary" @click="openCreateTeam">+ 新建团队</el-button>
+            <el-button v-if="can('team.write')" type="primary" @click="openCreateTeam">+ 新建团队</el-button>
           </template>
           <el-table v-if="teams.length" :data="teams" size="default">
             <el-table-column prop="id" label="#" width="80" />

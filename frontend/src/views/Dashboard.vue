@@ -5,6 +5,8 @@ import { ElMessage } from 'element-plus'
 
 import { healthDetail, overview } from '@/api/stats'
 import type { DashboardOverview, HealthDetail } from '@/api/stats'
+import { qualityMetrics } from '@/api/quality'
+import type { QualityMetrics } from '@/api/quality'
 import AppCard from '@/components/AppCard.vue'
 import BarChart from '@/components/BarChart.vue'
 import DonutChart from '@/components/DonutChart.vue'
@@ -22,6 +24,7 @@ const auth = useAuthStore()
 
 const stats = ref<DashboardOverview | null>(null)
 const health = ref<HealthDetail | null>(null)
+const quality = ref<QualityMetrics | null>(null)
 const loading = ref(true)
 const range = ref<'7d' | '14d' | '30d'>('14d')
 
@@ -183,9 +186,14 @@ const actionLabel: Record<string, string> = {
 async function refresh() {
   loading.value = true
   try {
-    const [o, h] = await Promise.all([overview(), healthDetail()])
+    const [o, h, q] = await Promise.all([
+      overview(),
+      healthDetail(),
+      qualityMetrics(30).catch(() => null),
+    ])
     stats.value = o
     health.value = h
+    quality.value = q
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '加载失败')
   } finally {
@@ -411,6 +419,70 @@ onMounted(refresh)
           </div>
         </AppCard>
       </div>
+
+      <!-- 数据飞轮质量监控 (AI-2) -->
+      <AppCard v-if="quality" hoverable class="quality-card">
+        <template #header>
+          <SectionHeader
+            title="数据飞轮质量"
+            description="误检率 / 漏检率 / 校正率 — 飞轮是否在真正改进模型"
+          />
+        </template>
+        <div class="quality-grid">
+          <div class="quality-metric">
+            <div class="quality-metric__label">误检率</div>
+            <div class="quality-metric__value num text-danger">
+              {{ (quality.rates.false_positive_rate * 100).toFixed(1) }}%
+            </div>
+            <div class="quality-metric__sub">rejected / total</div>
+            <Sparkline
+              :data="quality.trend.detections.map((d) => d.count)"
+              color="var(--c-danger-500)"
+              :width="120"
+              :height="28"
+            />
+          </div>
+          <div class="quality-metric">
+            <div class="quality-metric__label">人工补检率</div>
+            <div class="quality-metric__value num text-warning">
+              {{ (quality.rates.miss_rate_proxy * 100).toFixed(1) }}%
+            </div>
+            <div class="quality-metric__sub">added (manual) / total · 漏检代理</div>
+            <Sparkline
+              :data="quality.trend.corrections.map((d) => d.count)"
+              color="var(--c-warning-500)"
+              :width="120"
+              :height="28"
+            />
+          </div>
+          <div class="quality-metric">
+            <div class="quality-metric__label">校正率</div>
+            <div class="quality-metric__value num text-success">
+              {{ (quality.rates.correction_rate * 100).toFixed(1) }}%
+            </div>
+            <div class="quality-metric__sub">corrected / total</div>
+            <Sparkline
+              :data="quality.trend.corrections.map((d) => d.count)"
+              color="var(--c-success-500)"
+              :width="120"
+              :height="28"
+            />
+          </div>
+          <div class="quality-metric">
+            <div class="quality-metric__label">近 7 天检测</div>
+            <div class="quality-metric__value num">
+              {{ quality.window.detections.value }}
+              <span
+                class="quality-delta"
+                :class="quality.window.detections.delta >= 0 ? 'up' : 'down'"
+              >
+                {{ quality.window.detections.delta >= 0 ? '+' : '' }}{{ quality.window.detections.pct }}%
+              </span>
+            </div>
+            <div class="quality-metric__sub">vs 前 7 天</div>
+          </div>
+        </div>
+      </AppCard>
 
       <!-- 最近活动 -->
       <div class="activity-grid">
@@ -724,6 +796,48 @@ onMounted(refresh)
 .chip-warning  { color: var(--c-warning-600);  background: var(--c-warning-50); }
 .chip-danger   { color: var(--c-danger-600);   background: var(--c-danger-50); }
 .chip-neutral  { color: var(--text-secondary);  background: var(--bg-subtle); }
+
+/* 数据飞轮质量 */
+.quality-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--sp-3);
+}
+.quality-metric {
+  padding: var(--sp-3);
+  background: var(--bg-subtle);
+  border-radius: var(--r-md);
+}
+.quality-metric__label {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.quality-metric__value {
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-semibold);
+  margin: 4px 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+.quality-metric__sub {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+  margin-bottom: var(--sp-2);
+}
+.quality-delta {
+  font-size: var(--fs-sm);
+  padding: 1px var(--sp-2);
+  border-radius: var(--r-full);
+}
+.quality-delta.up {
+  color: var(--c-success-600);
+  background: var(--c-success-50);
+}
+.quality-delta.down {
+  color: var(--c-danger-600);
+  background: var(--c-danger-50);
+}
 
 /* 快捷入口 */
 .quick-grid {

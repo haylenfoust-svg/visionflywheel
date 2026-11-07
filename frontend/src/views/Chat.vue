@@ -8,8 +8,10 @@ import AppCard from '@/components/AppCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { useAuthStore } from '@/stores/auth'
+import { usePermissions } from '@/composables/usePermissions'
 
 const auth = useAuthStore()
+const { can } = usePermissions()
 const messages = ref<ChatMessage[]>([])
 const input = ref('')
 const loading = ref(false)
@@ -160,7 +162,7 @@ onMounted(() => {
                     <span class="chip chip-primary">{{ intentLabel[m.intent] ?? m.intent }}</span>
                     <span v-if="m.checked === false" class="chip chip-warning">⚠ 数字待核对</span>
                     <span v-else-if="m.checked" class="chip chip-success">✓ 已对照统计</span>
-                    <button class="save-btn" @click="saveToKnowledge(m)">✦ 存入知识库</button>
+                    <button v-if="can('chat.knowledge.write')" class="save-btn" @click="saveToKnowledge(m)">✦ 存入知识库</button>
                   </div>
                 </div>
               </div>

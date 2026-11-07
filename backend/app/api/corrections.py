@@ -7,6 +7,8 @@ from app.core.database import get_db
 from app.core.deps import CurrentUser
 from app.core.envelope import EnvelopeRoute
 from app.core.exceptions import AppError, Err
+from app.models.correction import Correction as CorrectionModel
+from app.models.feedback import FeedbackTicket as FeedbackTicketModel
 from app.schemas.common import Page
 from app.schemas.correction import (
     CorrectionBatchRequest,
@@ -21,6 +23,7 @@ from app.schemas.correction import (
 )
 from app.services import correction_service, feedback_service
 from app.services.permission_service import require_permission
+from app.services.scope_service import apply_scope_filter_via_task
 
 router = APIRouter(tags=["corrections"], route_class=EnvelopeRoute)
 
@@ -129,14 +132,18 @@ def audit(
     page_size: int = Query(50, ge=1, le=200),
     _perm: object = Depends(require_permission("audit.read")),
 ) -> Page[CorrectionOut]:
-    payload = correction_service.list_corrections(
-        db,
-        task_id=task_id,
-        detection_id=detection_id,
-        operator=operator,
-        page=page,
-        page_size=page_size,
-    )
+    _q = db.query(CorrectionModel)
+    if task_id is not None:
+        _q = _q.filter(CorrectionModel.task_id == task_id)
+    if detection_id is not None:
+        _q = _q.filter(CorrectionModel.detection_id == detection_id)
+    if operator is not None:
+        _q = _q.filter(CorrectionModel.operator == operator)
+    _q = apply_scope_filter_via_task(_q, user, CorrectionModel, db)
+    _total = _q.count()
+    _rows = _q.order_by(CorrectionModel.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    _pages = (_total + page_size - 1) // page_size if _total else 0
+    payload = {"items": _rows, "total": _total, "page": page, "page_size": page_size, "pages": _pages}
     return Page[CorrectionOut](
         items=[CorrectionOut.model_validate(r) for r in payload["items"]],
         total=payload["total"],
@@ -189,14 +196,16 @@ def list_feedback(
     page_size: int = Query(20, ge=1, le=200),
     _perm: object = Depends(require_permission("feedback.read")),
 ) -> Page[FeedbackOut]:
-    payload = feedback_service.list_tickets(
-        db,
-        status=status,
-        username=user.username,
-        only_mine=mine or user.role != "admin",
-        page=page,
-        page_size=page_size,
-    )
+    _q = db.query(FeedbackTicketModel)
+    if status:
+        _q = _q.filter(FeedbackTicketModel.status == status)
+    if mine or user.role != "admin":
+        _q = _q.filter(FeedbackTicketModel.username == user.username)
+    _q = apply_scope_filter_via_task(_q, user, FeedbackTicketModel, db)
+    _total = _q.count()
+    _rows = _q.order_by(FeedbackTicketModel.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    _pages = (_total + page_size - 1) // page_size if _total else 0
+    payload = {"items": _rows, "total": _total, "page": page, "page_size": page_size, "pages": _pages}
     return Page[FeedbackOut](
         items=[FeedbackOut.model_validate(r) for r in payload["items"]],
         total=payload["total"],

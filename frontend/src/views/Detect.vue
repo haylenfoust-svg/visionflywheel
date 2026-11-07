@@ -9,7 +9,10 @@ import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import UploadDrop from '@/components/UploadDrop.vue'
+import { usePermissions } from '@/composables/usePermissions'
 import type { Detection, UploadResult } from '@/types/detection'
+
+const { can } = usePermissions()
 
 const params = reactive({
   conf_threshold: 0.5,
@@ -136,7 +139,7 @@ function reset() {
       <aside class="sidebar">
         <AppCard title="上传" subtitle="支持多选拖拽" hoverable>
           <UploadDrop
-            :disabled="loading"
+v-if="can('task.write')" :disabled="loading"
             :multiple="true"
             @select="onFile"
             @select-many="onBatch"

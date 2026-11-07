@@ -64,13 +64,11 @@ class TestPermissionEnforcement:
 
     def test_admin_can_do_everything_via_legacy_bypass(self, client):
         token = _login(client, "admin", "admin-password-123")
-        # These should all succeed because admin has role='admin' bypass
         assert client.get("/api/auth/users", headers={"Authorization": f"Bearer {token}"}).status_code == 200
         assert client.get("/api/rbac/roles", headers={"Authorization": f"Bearer {token}"}).status_code == 200
         assert client.get("/api/dataset", headers={"Authorization": f"Bearer {token}"}).status_code == 200
 
     def test_user_without_role_cannot_write_config(self, client, db_session):
-        # Fresh user with NO RBAC role
         _make_user(db_session, "norole")
         token = _login(client, "norole", "password-123")
         r = client.put(
@@ -102,7 +100,6 @@ class TestPermissionEnforcement:
         _make_user(db_session, "op1")
         _assign_role(db_session, db_session.query(User).filter(User.username == "op1").first(), "operator")
         token = _login(client, "op1", "password-123")
-        # Operator CAN write tasks
         import pathlib
         import tempfile
 
@@ -116,7 +113,6 @@ class TestPermissionEnforcement:
                 files={"file": ("s.png", io.BytesIO(png), "image/png")},
             )
         assert r.status_code == 200
-        # Operator CANNOT delete users
         r = client.delete("/api/auth/users/999", headers={"Authorization": f"Bearer {token}"})
         assert r.status_code == 403
 
@@ -168,14 +164,11 @@ class TestDataIsolation:
 
     def test_global_scope_sees_all(self, client, db_session):
         admin_token = _login(client, "admin", "admin-password-123")
-        # Admin creates a task with a scope
         org = Organization(name="Test Org", code="test_org_iso1")
         db_session.add(org)
         db_session.commit()
         db_session.refresh(org)
         _upload(client, admin_token, org_id=org.id)
-
-        # Global-scope user can see it
         self._setup_scoped_user(db_session, "global1")
         token = _login(client, "global1", "password-123")
         r = client.get("/api/tasks", headers={"Authorization": f"Bearer {token}"})
@@ -190,19 +183,14 @@ class TestDataIsolation:
         db_session.commit()
         db_session.refresh(org_a)
         db_session.refresh(org_b)
-
-        # Upload one to each org
         _upload(client, admin_token, name="a.png", org_id=org_a.id)
         _upload(client, admin_token, name="b.png", org_id=org_b.id)
-
-        # User scoped to org_a should see only org_a's tasks (plus unscoped)
         self._setup_scoped_user(db_session, "org_a_user", org_id=org_a.id)
         token = _login(client, "org_a_user", "password-123")
         r = client.get("/api/tasks", headers={"Authorization": f"Bearer {token}"})
         assert r.status_code == 200
         items = r.json()["data"]["items"]
         org_ids = {t.get("org_id") for t in items}
-        # Should NOT see org_b tasks
         assert org_b.id not in org_ids, f"leaked org_b tasks: {org_ids}"
 
     def test_team_scope_filters_by_team(self, client, db_session):
@@ -217,10 +205,8 @@ class TestDataIsolation:
         db_session.commit()
         db_session.refresh(team_a)
         db_session.refresh(team_b)
-
         _upload(client, admin_token, name="t1.png", team_id=team_a.id)
         _upload(client, admin_token, name="t2.png", team_id=team_b.id)
-
         self._setup_scoped_user(db_session, "team_a_user", team_id=team_a.id)
         token = _login(client, "team_a_user", "password-123")
         r = client.get("/api/tasks", headers={"Authorization": f"Bearer {token}"})
@@ -230,19 +216,15 @@ class TestDataIsolation:
         assert team_b.id not in team_ids, f"leaked team_b tasks: {team_ids}"
 
     def test_no_role_gets_403_everywhere(self, client, db_session):
-        """A user with NO RBAC role is rejected at the permission gate (B端-1)."""
         admin_token = _login(client, "admin", "admin-password-123")
         _upload(client, admin_token, name="admin_task.png")
-
         _make_user(db_session, "no_role_user")
         token = _login(client, "no_role_user", "password-123")
-        # Every business endpoint now requires a permission code
         for path in ["/api/tasks", "/api/detections/stats", "/api/dataset", "/api/weights"]:
             r = client.get(path, headers={"Authorization": f"Bearer {token}"})
             assert r.status_code == 403, f"{path} should 403 for role-less user"
 
     def test_scoped_user_cannot_see_other_scoped_rows(self, client, db_session):
-        """A user scoped to team X cannot see rows scoped to team Y (B端-2)."""
         admin_token = _login(client, "admin", "admin-password-123")
         org = Organization(name="Iso Org", code="iso_org")
         db_session.add(org)
@@ -254,11 +236,8 @@ class TestDataIsolation:
         db_session.commit()
         db_session.refresh(team_a)
         db_session.refresh(team_b)
-
         _upload(client, admin_token, name="a.png", team_id=team_a.id)
         _upload(client, admin_token, name="b.png", team_id=team_b.id)
-
-        # User scoped to team_a — sees only team_a rows (and unscoped)
         u = _make_user(db_session, "team_a_only")
         _assign_role(db_session, u, "viewer", scope_type="team", scope_id=team_a.id)
         token = _login(client, "team_a_only", "password-123")
@@ -270,15 +249,12 @@ class TestDataIsolation:
 
     def test_scoped_user_sees_unscoped_tasks(self, client, db_session):
         admin_token = _login(client, "admin", "admin-password-123")
-        # Unscoped task (no org, no team)
         _upload(client, admin_token, name="unscoped.png")
-
         self._setup_scoped_user(db_session, "unscoped_seer")
         token = _login(client, "unscoped_seer", "password-123")
         r = client.get("/api/tasks", headers={"Authorization": f"Bearer {token}"})
         assert r.status_code == 200
         items = r.json()["data"]["items"]
-        # Should see at least the unscoped one
         unscoped = [t for t in items if t.get("org_id") is None and t.get("team_id") is None]
         assert len(unscoped) >= 1
 
@@ -290,13 +266,42 @@ class TestDataIsolation:
         db_session.commit()
         db_session.refresh(org_a)
         db_session.refresh(org_b)
-
         _upload(client, admin_token, name="a.png", org_id=org_a.id)
         _upload(client, admin_token, name="b.png", org_id=org_b.id)
-
         self._setup_scoped_user(db_session, "only_a", org_id=org_a.id)
         token = _login(client, "only_a", "password-123")
         r = client.get("/api/tasks", headers={"Authorization": f"Bearer {token}"})
         items = r.json()["data"]["items"]
         for t in items:
             assert t.get("org_id") != org_b.id, f"saw org_b task: {t}"
+
+
+class TestQualityMetrics:
+    """Flywheel quality signals (AI-2)."""
+
+    def test_quality_endpoint(self, client, db_session):
+        token = _login(client, "admin", "admin-password-123")
+        r = client.get("/api/stats/quality", headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 200
+        data = r.json()["data"]
+        assert "rates" in data
+        assert "totals" in data
+        assert "trend" in data
+        assert "false_positive_rate" in data["rates"]
+        assert "correction_rate" in data["rates"]
+
+    def test_quality_reflects_corrections(self, client, db_session):
+        token = _login(client, "admin", "admin-password-123")
+        _upload(client, token, name="q.png")
+        dets = client.get("/api/tasks/1/detections", headers={"Authorization": f"Bearer {token}"}).json()["data"]
+        if not dets:
+            pytest.skip("no detections (untrained YOLO)")
+        client.post(
+            "/api/corrections",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"action": "false_positive", "detection_id": dets[0]["id"]},
+        )
+        r = client.get("/api/stats/quality", headers={"Authorization": f"Bearer {token}"})
+        data = r.json()["data"]
+        assert data["totals"]["rejected"] >= 1
+        assert data["rates"]["false_positive_rate"] > 0

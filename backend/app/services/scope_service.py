@@ -98,6 +98,44 @@ def apply_scope_filter(query: Query, user: User, model: Any, db: Session) -> Que
     return query.filter(or_(*conditions))
 
 
+def visible_task_ids_subquery(user: User, db: Session) -> Any:
+    """Subquery of Task.id values visible to `user` — used to filter child rows."""
+    from app.models.task import Task
+
+    task_q = apply_scope_filter(db.query(Task.id), user, Task, db)
+    return task_q.subquery()
+
+
+def apply_scope_filter_via_task(
+    query: Query,
+    user: User,
+    model: Any,
+    db: Session,
+    *,
+    task_id_attr: str = "task_id",
+) -> Query:
+    """Constrain `query` where `model.task_id` points at a Task row.
+
+    Used by corrections / feedback whose scope is inherited from their
+    parent task. Rows with a NULL task_id are always visible (they are
+    not bound to any scoped task).
+    """
+    from app.models.task import Task
+
+    scope = get_user_scope_filter(db, user)
+    if scope.is_global:
+        return query
+
+    task_id_col = getattr(model, task_id_attr)
+    unscoped = task_id_col.is_(None)
+    if scope.own_only:
+        own_task_ids = db.query(Task.id).filter(Task.created_by == user.username).subquery()
+        return query.filter(or_(unscoped, task_id_col.in_(own_task_ids)))
+
+    visible = visible_task_ids_subquery(user, db)
+    return query.filter(or_(unscoped, task_id_col.in_(visible)))
+
+
 def scope_meta(db: Session, user: User) -> dict[str, Any]:
     """Describe the user's scope for display in the UI / API metadata."""
     return get_user_scope_filter(db, user).describe()
