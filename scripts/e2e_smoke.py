@@ -211,7 +211,103 @@ def main() -> int:
         assert r.json()["data"]["status"] == "replied"
         print(f"[OK] feedback ticket #{tid} created + replied")
 
-    print("\n[E2E] M1 + M2 + M3 smoke checks all passed.")
+        # ---------- M4: dataset export + holdout + weights ----------
+        r = c.get("/api/dataset/pending", headers=headers)
+        assert r.status_code == 200, r.text
+        pending_images = r.json()["data"]["pending_images"]
+        assert pending_images >= 1, "expect at least one corrected image to export"
+        print(f"[OK] dataset pending: {pending_images} images")
+
+        r = c.post(
+            "/api/dataset/export",
+            headers=headers,
+            json={"name": "smoke", "val_ratio": 0.2, "seed": 42},
+        )
+        assert r.status_code == 201, r.text
+        dataset = r.json()["data"]
+        assert dataset["total_labels"] >= 1
+        assert len(dataset["class_names"]) >= 1
+        version = dataset["dataset_version"]
+        print(
+            f"[OK] export {version}: train={dataset['train_images']} val={dataset['val_images']} "
+            f"holdout={dataset['holdout_images']} classes={dataset['class_names']}"
+        )
+
+        # data.yaml + labels on disk
+        from pathlib import Path as _Path
+
+        from app.core.config import get_settings as _gs
+
+        runtime_root = _Path(_gs().upload_dir).parent.resolve()
+        root = runtime_root / "datasets" / version
+        assert (root / "data.yaml").is_file(), f"missing data.yaml under {root}"
+        train_imgs = list((root / "images" / "train").glob("*"))
+        val_imgs = list((root / "images" / "val").glob("*"))
+        assert train_imgs or val_imgs
+        assert (root / "labels" / "train").is_dir() and (root / "labels" / "val").is_dir()
+        # labels are normalised to 0..1
+        for lbl in (root / "labels").rglob("*.txt"):
+            for line in lbl.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                cls, cx, cy, bw, bh = line.split()
+                assert cls.isdigit()
+                for v in (cx, cy, bw, bh):
+                    f = float(v)
+                    assert 0.0 <= f <= 1.0
+        print(f"[OK] yolo layout verified: train={len(train_imgs)} val={len(val_imgs)} labels normalised")
+
+        # holdout freeze
+        r = c.get("/api/dataset/holdout", headers=headers)
+        assert r.status_code == 200, r.text
+        holdout_items = r.json()["data"]["items"]
+        for item in holdout_items:
+            assert item["split"] == "holdout"
+            assert item["is_frozen"] is True
+        print(f"[OK] holdout: {len(holdout_items)} frozen images")
+
+        # second export should find nothing new (idempotent w.r.t. images)
+        r = c.post("/api/dataset/export", headers=headers, json={"name": "smoke2"})
+        assert r.status_code == 409, r.text
+        print("[OK] second export finds nothing new (409)")
+
+        # download zip
+        r = c.get(f"/api/dataset/{version}/download", headers=headers)
+        assert r.status_code == 200, r.text
+        assert r.headers["content-type"] == "application/zip"
+        print(f"[OK] dataset zip download: {len(r.content)} bytes")
+
+        # weights
+        from app.core.config import get_settings as _gs2
+
+        weights_dir = _Path(_gs2().weights_dir)
+        weights_dir.mkdir(parents=True, exist_ok=True)
+        (weights_dir / "smoke_best.pt").write_bytes(b"0" * 8192)
+
+        r = c.get("/api/weights", headers=headers)
+        assert r.status_code == 200, r.text
+        weights = r.json()["data"]
+        target = next(w for w in weights if w["filename"] == "smoke_best.pt")
+        print(f"[OK] weights registered: {len(weights)} entries")
+
+        r = c.put(f"/api/weights/{target['id']}/default", headers=headers)
+        assert r.status_code == 200, r.text
+        swap = r.json()["data"]
+        assert swap["is_default"] is True
+        assert swap["requires_restart"] is False  # FR-6.5 / G4
+        print(f"[OK] hot-swap default weight in {swap['reloaded_in_ms']:.0f}ms (requires_restart=false)")
+
+        # training is gated in fallback mode (ADR-002)
+        r = c.post(
+            "/api/train",
+            headers=headers,
+            json={"dataset_version": version, "epochs": 1},
+        )
+        assert r.status_code == 403, r.text
+        assert r.json()["code"] == 40303
+        print("[OK] training gated in fallback mode (403)")
+
+    print("\n[E2E] M1 + M2 + M3 + M4 smoke checks all passed.")
     return 0
 
 

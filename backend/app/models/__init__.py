@@ -4,6 +4,7 @@ from app.models.audit import AuditLog
 from app.models.base import Base, TimestampMixin
 from app.models.config import ConfigEntry
 from app.models.correction import Correction
+from app.models.dataset import DatasetExport, DatasetSample, TrainingRun
 from app.models.detection import Detection
 from app.models.feedback import FeedbackTicket
 from app.models.task import Task
@@ -21,4 +22,7 @@ __all__ = [
     "Weight",
     "Correction",
     "FeedbackTicket",
+    "DatasetExport",
+    "DatasetSample",
+    "TrainingRun",
 ]

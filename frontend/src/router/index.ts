@@ -33,6 +33,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/Annotate.vue'),
         meta: { title: '校正工作台' },
       },
+      {
+        path: 'dataset',
+        name: 'dataset',
+        component: () => import('@/views/Dataset.vue'),
+        meta: { title: '数据与权重' },
+      },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
