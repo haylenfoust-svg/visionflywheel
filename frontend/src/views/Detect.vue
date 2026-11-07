@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import { batchUpload, uploadAndDetect } from '@/api/tasks'
@@ -65,6 +65,53 @@ const aiSources = computed(() => {
   return s
 })
 
+// ---- Drawer detail (UI改进6) ----
+const showDetailDrawer = ref(false)
+
+function openDetail() {
+  if (selected.value) showDetailDrawer.value = true
+}
+
+// ---- Recognition history (UI改进6) ----
+const recognitionHistory = ref<Array<{ id: number; name: string; count: number; url: string; ts: string }>>([])
+const showHistory = ref(false)
+
+function addToHistory(res: UploadResult, filename: string) {
+  recognitionHistory.value.unshift({
+    id: res.task_id,
+    name: filename,
+    count: res.detections.length,
+    url: res.result_url || res.image_url,
+    ts: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+  })
+  if (recognitionHistory.value.length > 12) recognitionHistory.value.pop()
+}
+
+function useHistoryItem(item: { url: string }) {
+  previewUrl.value = item.url
+  showHistory.value = false
+  ElMessage.success('已载入历史结果')
+}
+
+// ---- URL state sync (UI改进6) ----
+function syncUrlToState() {
+  const u = new URL(window.location.href)
+  if (result.value?.task_id) u.searchParams.set('task', String(result.value.task_id))
+  if (params.conf_threshold !== 0.5) u.searchParams.set('conf', String(params.conf_threshold))
+  if (params.iou_threshold !== 0.45) u.searchParams.set('iou', String(params.iou_threshold))
+  window.history.replaceState({}, '', u.toString())
+}
+
+function loadUrlState() {
+  const u = new URL(window.location.href)
+  const conf = u.searchParams.get('conf')
+  const iou = u.searchParams.get('iou')
+  if (conf) params.conf_threshold = parseFloat(conf)
+  if (iou) params.iou_threshold = parseFloat(iou)
+}
+
+onMounted(loadUrlState)
+
 const detectorTag = computed(() => {
   const mode = result.value?.detector_mode
   if (mode === 'yolo') return { text: 'YOLO 引擎', type: 'success' as const, icon: '⚡' }
@@ -98,6 +145,8 @@ async function onFile(file: File) {
       ElMessage.warning('当前使用降级检测器。闭环可跑通，但精度有限。')
     } else {
       ElMessage.success(`识别完成，共 ${res.detections.length} 个目标`)
+    addToHistory(res, file.name)
+    syncUrlToState()
     }
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '识别失败')
@@ -151,6 +200,9 @@ function reset() {
         <el-tag v-if="detectorTag" :type="detectorTag.type" size="large" effect="light" round>
           {{ detectorTag.icon }} {{ detectorTag.text }}
         </el-tag>
+        <el-button v-if="recognitionHistory.length" size="large" @click="showHistory = true">
+          ⏱ 识别历史 ({{ recognitionHistory.length }})
+        </el-button>
         <el-button v-if="result" size="large" @click="reset">重新开始</el-button>
       </template>
     </PageHeader>
@@ -326,6 +378,9 @@ v-if="can('task.write')" :disabled="loading"
             <!-- 选中项详情 -->
             <transition name="slide">
               <div v-if="selected" class="detail-panel">
+                <el-button type="primary" plain size="small" class="mb-3" @click="openDetail">
+                  打开详情抽屉
+                </el-button>
                 <div class="detail-panel__header">
                   <h4>选中项详情</h4>
                   <el-button size="small" text @click="selected = null">关闭</el-button>
@@ -374,6 +429,49 @@ v-if="can('task.write')" :disabled="loading"
         </template>
       </section>
     </div>
+    <!-- 详情抽屉 -->
+    <el-drawer v-model="showDetailDrawer" title="检测详情" size="480px">
+      <div v-if="selected" class="drawer-body">
+        <div class="drawer-hero">
+          <img v-if="previewUrl" :src="previewUrl" alt="preview" class="drawer-preview" />
+        </div>
+        <el-descriptions :column="1" size="default" border>
+          <el-descriptions-item label="ID">{{ selected.id }}</el-descriptions-item>
+          <el-descriptions-item label="类别（英文）">{{ selected.class_name }}</el-descriptions-item>
+          <el-descriptions-item label="类别（中文）">{{ selected.class_name_zh ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="置信度">{{ (selected.confidence * 100).toFixed(1) }}%</el-descriptions-item>
+          <el-descriptions-item label="坐标">
+            {{ selected.bbox.x1.toFixed(0) }}, {{ selected.bbox.y1.toFixed(0) }},
+            {{ selected.bbox.x2.toFixed(0) }}, {{ selected.bbox.y2.toFixed(0) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <span class="chip" :class="selected.status === 'corrected' ? 'chip-success' : selected.status === 'rejected' ? 'chip-danger' : 'chip-warning'">
+              {{ selected.status }}
+            </span>
+          </el-descriptions-item>
+          <el-descriptions-item label="来源">{{ selected.source === 'model' ? '模型' : '人工' }}</el-descriptions-item>
+        </el-descriptions>
+      </div>
+    </el-drawer>
+
+    <!-- 识别历史抽屉 -->
+    <el-drawer v-model="showHistory" title="识别历史" size="360px">
+      <div v-if="recognitionHistory.length" class="history-list">
+        <div
+          v-for="item in recognitionHistory"
+          :key="item.id"
+          class="history-item"
+          @click="useHistoryItem(item)"
+        >
+          <img :src="item.url" alt="" class="history-thumb" />
+          <div class="history-body">
+            <div class="history-name">{{ item.name }}</div>
+            <div class="history-meta">{{ item.count }} 个目标 · {{ item.ts }}</div>
+          </div>
+        </div>
+      </div>
+      <el-empty v-else description="暂无识别历史" />
+    </el-drawer>
   </div>
 </template>
 
@@ -599,6 +697,58 @@ v-if="can('task.write')" :disabled="loading"
 .slide-enter-from, .slide-leave-to {
   opacity: 0;
   transform: translateY(-8px);
+}
+
+.drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.drawer-hero {
+  background: var(--bg-subtle);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.drawer-preview {
+  display: block;
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+}
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.history-item {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease-standard);
+}
+.history-item:hover {
+  border-color: var(--border-accent);
+  background: var(--bg-hover);
+}
+.history-thumb {
+  width: 64px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: var(--r-sm);
+}
+.history-body {
+  flex: 1;
+}
+.history-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+.history-meta {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
 }
 
 @media (max-width: 1000px) {

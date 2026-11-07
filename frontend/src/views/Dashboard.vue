@@ -8,10 +8,9 @@ import type { DashboardOverview, HealthDetail } from '@/api/stats'
 import { qualityMetrics } from '@/api/quality'
 import type { QualityMetrics } from '@/api/quality'
 import AppCard from '@/components/AppCard.vue'
-import BarChart from '@/components/BarChart.vue'
+import EChart from '@/components/EChart.vue'
 import DonutChart from '@/components/DonutChart.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import LineChart from '@/components/LineChart.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import SectionHeader from '@/components/SectionHeader.vue'
 import Sparkline from '@/components/Sparkline.vue'
@@ -380,14 +379,14 @@ onMounted(refresh)
           <template #header>
             <SectionHeader title="类别分布" subtitle="Top 10 · 按检测次数" />
           </template>
-          <BarChart :data="classChartData" color="var(--c-primary-500)" :height="200" />
+          <EChart :data="classChartData" kind="bar" role="primary" :height="200" />
         </AppCard>
 
         <AppCard hoverable>
           <template #header>
             <SectionHeader title="校正动作" subtitle="飞轮动力源 · 累计" />
           </template>
-          <BarChart :data="actionChartData" color="var(--c-success-500)" :height="200" />
+          <EChart :data="actionChartData" kind="bar" role="success" :height="200" />
         </AppCard>
       </div>
 

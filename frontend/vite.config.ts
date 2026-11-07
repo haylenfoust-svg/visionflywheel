@@ -44,6 +44,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
+          echarts: ["echarts"],
           'element-plus': ['element-plus'],
           vue: ['vue', 'vue-router', 'pinia'],
           axios: ['axios'],
