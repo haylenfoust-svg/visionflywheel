@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useAuthStore } from '@/stores/auth'
+import { useTheme, THEME_LABELS, type ThemeMode } from '@/composables/useTheme'
 
 const router = useRouter()
 const route = useRoute()
@@ -10,6 +11,9 @@ const auth = useAuthStore()
 
 const collapsed = ref(false)
 const pageTitle = computed(() => (route.meta.title as string) ?? '控制台')
+
+const { mode: themeMode, cycleTheme } = useTheme()
+const themeLabel = computed(() => THEME_LABELS[themeMode.value as ThemeMode])
 
 const displayName = computed(() => auth.user?.display_name || auth.user?.username || '')
 const initials = computed(() => (displayName.value[0] ?? '?').toUpperCase())
@@ -96,12 +100,32 @@ function handleCommand(cmd: string) {
 
     <!-- 主区 -->
     <el-container class="layout__main">
-      <el-header class="layout__header" height="56px">
+      <el-header class="layout__header" :height="'var(--layout-header-h)'">
         <div class="header__left">
-          <h2 class="header__title">{{ pageTitle }}</h2>
+          <span class="header__crumb">{{ pageTitle }}</span>
         </div>
 
         <div class="header__right">
+          <!-- 主题切换 -->
+          <el-tooltip :content="`主题：${themeLabel}`" placement="bottom">
+            <button class="icon-btn" :aria-label="`切换主题（当前：${themeLabel}）`" @click="cycleTheme">
+              <!-- light: sun -->
+              <svg v-if="themeMode === 'light'" viewBox="0 0 24 24" class="icon-btn__svg" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8" />
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+              <!-- dark: moon -->
+              <svg v-else-if="themeMode === 'dark'" viewBox="0 0 24 24" class="icon-btn__svg" aria-hidden="true">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+              </svg>
+              <!-- system: monitor -->
+              <svg v-else viewBox="0 0 24 24" class="icon-btn__svg" aria-hidden="true">
+                <rect x="2" y="3" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8" />
+                <path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+            </button>
+          </el-tooltip>
+
           <!-- 通知铃 -->
           <el-tooltip content="通知" placement="bottom">
             <button class="icon-btn" aria-label="通知">
@@ -180,11 +204,13 @@ function handleCommand(cmd: string) {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-5) var(--sp-4);
+  padding: 0 var(--sp-4);
+  height: var(--layout-header-h);
+  min-height: var(--layout-header-h);
   cursor: pointer;
   border-bottom: 1px solid var(--border-default);
   user-select: none;
-  min-height: 56px;
+  flex-shrink: 0;
 }
 .brand__mark {
   flex-shrink: 0;
@@ -308,14 +334,17 @@ function handleCommand(cmd: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  height: var(--layout-header-h);
   padding: 0 var(--sp-6);
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-default);
   z-index: var(--z-sticky);
+  flex-shrink: 0;
 }
-.header__title {
-  font-size: var(--fs-lg);
-  font-weight: var(--fw-semibold);
+.header__crumb {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  color: var(--text-secondary);
   letter-spacing: -0.01em;
 }
 .header__right {

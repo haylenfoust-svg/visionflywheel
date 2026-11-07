@@ -61,7 +61,36 @@ export const tokens = {
 
 export type TokenName = keyof typeof tokens
 
+/** Dark-mode overrides — keep in sync with design-system.scss [data-theme='dark']. */
+const darkTokens: Partial<Record<TokenName, string>> = {
+  neutral0: '#161b22',
+  neutral50: '#0e1117',
+  neutral100: '#1c2330',
+  neutral200: '#2a3240',
+  neutral300: '#3d4756',
+  neutral400: '#4a5563',
+  neutral500: '#6e7b8a',
+  neutral600: '#9aa7b4',
+  neutral700: '#c5ced8',
+  neutral800: '#dfe5ec',
+  neutral900: '#e6edf3',
+
+  'chart-fill': 'rgba(99, 102, 241, 0.22)',
+  'chart-fill-alt': 'rgba(16, 185, 129, 0.22)',
+  'chart-fill-warn': 'rgba(245, 158, 11, 0.22)',
+  'chart-fill-danger': 'rgba(239, 68, 68, 0.22)',
+
+  'canvas-fill': '#161b22',
+  'canvas-handle': '#2a3242',
+}
+
+export function isDark(): boolean {
+  if (typeof document === 'undefined') return false
+  return document.documentElement.getAttribute('data-theme') === 'dark'
+}
+
 export function token(name: TokenName): string {
+  if (isDark() && darkTokens[name] !== undefined) return darkTokens[name] as string
   return tokens[name]
 }
 
@@ -84,27 +113,27 @@ export function chartColor(role: string): string {
 
 export function chartFill(role: string): string {
   const map: Record<string, string> = {
-    primary: tokens['chart-fill'],
-    success: tokens['chart-fill-alt'],
-    warning: tokens['chart-fill-warn'],
-    danger: tokens['chart-fill-danger'],
+    primary: token('chart-fill'),
+    success: token('chart-fill-alt'),
+    warning: token('chart-fill-warn'),
+    danger: token('chart-fill-danger'),
   }
-  return map[role] ?? tokens['chart-fill']
+  return map[role] ?? token('chart-fill')
 }
 
 /**
  * Canvas drawing colors — used by ImageAnnotator.
  */
 export const canvas = {
-  stroke: tokens['canvas-stroke'],
-  strokeAlt: tokens['canvas-stroke-alt'],
-  strokeOk: tokens['canvas-stroke-ok'],
-  strokeWarn: tokens['canvas-stroke-warn'],
-  fill: tokens['canvas-fill'],
-  draft: tokens['canvas-draft'],
-  draftFill: tokens['canvas-draft-fill'],
-  handle: tokens['canvas-handle'],
-} as const
+  get stroke() { return token('canvas-stroke') },
+  get strokeAlt() { return token('canvas-stroke-alt') },
+  get strokeOk() { return token('canvas-stroke-ok') },
+  get strokeWarn() { return token('canvas-stroke-warn') },
+  get fill() { return token('canvas-fill') },
+  get draft() { return token('canvas-draft') },
+  get draftFill() { return token('canvas-draft-fill') },
+  get handle() { return token('canvas-handle') },
+}
 
 /**
  * Status → color role (used by DetectionTable, Dashboard, etc.).
@@ -112,14 +141,14 @@ export const canvas = {
 export function statusColor(status: string): string {
   switch (status) {
     case 'pending':
-      return tokens.warning
+      return token('warning')
     case 'corrected':
     case 'done':
-      return tokens.success
+      return token('success')
     case 'rejected':
     case 'failed':
-      return tokens.danger
+      return token('danger')
     default:
-      return tokens.neutral500
+      return token('neutral500')
   }
 }
