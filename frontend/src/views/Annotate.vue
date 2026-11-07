@@ -276,7 +276,7 @@ v-if="can('detection.correct')" type="warning" plain size="large" :loading="undo
         >
           ↩ 撤销最近一次
         </el-button>
-        <el-button size="large" @click="showFeedback = true">⚑ 反馈问题</el-button>
+        <el-button v-if="can('feedback.write')" size="large" @click="showFeedback = true">⚑ 反馈问题</el-button>
       </template>
     </PageHeader>
 

@@ -37,6 +37,7 @@ import type {
 } from '@/api/rbac'
 import { createUser, listUsers, updateUser } from '@/api/auth'
 import { usePermissions } from '@/composables/usePermissions'
+import { usePermissionStore } from '@/stores/permission'
 import type { User } from '@/types'
 import AppCard from '@/components/AppCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -46,6 +47,7 @@ import DataTable from '@/components/DataTable.vue'
 import type { Column } from '@/components/DataTable.vue'
 
 const { can } = usePermissions()
+const permStore = usePermissionStore()
 const activeTab = ref<'users' | 'roles' | 'orgs' | 'teams' | 'sessions' | 'audit'>('users')
 const loading = ref(false)
 
@@ -199,6 +201,7 @@ async function onBindRole(u: User) {
     await assignRole(u.id, { role_code: value.trim(), scope_type: 'global', scope_id: null })
     ElMessage.success('✓ 角色已分配')
     await refresh()
+    await permStore.refresh()
   } catch {
     /* cancelled */
   }
@@ -258,6 +261,8 @@ async function saveRole() {
     }
     roleDialog.value = false
     await refresh()
+    // Permissions may have changed — refresh the current user's set
+    await permStore.refresh()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '保存失败')
   }
@@ -506,7 +511,7 @@ onMounted(refresh)
                   <code class="mono role-card__code">{{ r.code }}</code>
                 </div>
                 <div class="role-card__actions">
-                  <el-button size="small" text type="primary" @click="openEditRole(r)">编辑</el-button>
+                  <el-button v-if="can('role.write')" size="small" text type="primary" @click="openEditRole(r)">编辑</el-button>
                   <el-button
                     size="small"
                     text
@@ -651,7 +656,7 @@ onMounted(refresh)
             </el-table-column>
             <el-table-column label="操作" width="120">
               <template #default="{ row }">
-                <el-button size="small" text type="danger" :disabled="!row.is_active" @click="onRevoke(row)">
+                <el-button v-if="can('session.revoke')" size="small" text type="danger" :disabled="!row.is_active" @click="onRevoke(row)">
                   强制下线
                 </el-button>
               </template>
@@ -678,7 +683,7 @@ onMounted(refresh)
             </el-table-column>
             <el-table-column label="操作" width="120">
               <template #default="{ row }">
-                <el-button size="small" text type="danger" :disabled="!row.is_active" @click="onRevoke(row)">
+                <el-button v-if="can('session.revoke')" size="small" text type="danger" :disabled="!row.is_active" @click="onRevoke(row)">
                   强制下线
                 </el-button>
               </template>

@@ -427,9 +427,9 @@ onMounted(refresh)
             <el-table-column prop="reply" label="回复" min-width="200" />
             <el-table-column label="操作" width="220">
               <template #default="{ row }">
-                <el-button size="small" text type="primary" @click="replyTicket(row)">回复</el-button>
-                <el-button size="small" text type="success" @click="setStatus(row, 'resolved')">解决</el-button>
-                <el-button size="small" text type="danger" @click="setStatus(row, 'rejected')">驳回</el-button>
+                <el-button v-if="can('feedback.manage')" size="small" text type="primary" @click="replyTicket(row)">回复</el-button>
+                <el-button v-if="can('feedback.manage')" size="small" text type="success" @click="setStatus(row, 'resolved')">解决</el-button>
+                <el-button v-if="can('feedback.manage')" size="small" text type="danger" @click="setStatus(row, 'rejected')">驳回</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -478,7 +478,7 @@ onMounted(refresh)
       </div>
       <template #footer>
         <el-button @click="userDialog = false">取消</el-button>
-        <el-button type="primary" @click="saveUser">保存</el-button>
+        <el-button v-if="can('user.write')" type="primary" @click="saveUser">保存</el-button>
       </template>
     </el-dialog>
   </div>

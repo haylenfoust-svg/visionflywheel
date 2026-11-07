@@ -357,7 +357,7 @@ onMounted(refresh)
             <el-table-column prop="created_at" label="时间" width="180" />
             <el-table-column label="操作" width="130">
               <template #default="{ row }">
-                <el-button size="small" text type="primary" @click="onDownload(row)">下载 zip</el-button>
+                <el-button v-if="can('dataset.read')" size="small" text type="primary" @click="onDownload(row)">下载 zip</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -436,10 +436,10 @@ onMounted(refresh)
             </el-table-column>
             <el-table-column label="操作" width="200">
               <template #default="{ row }">
-                <el-button size="small" text type="primary" :disabled="row.is_default" @click="onSetDefault(row)">
+                <el-button v-if="can('weight.switch')" size="small" text type="primary" :disabled="row.is_default" @click="onSetDefault(row)">
                   切换为默认
                 </el-button>
-                <el-button size="small" text type="danger" :disabled="row.is_default" @click="onDeleteWeight(row)">
+                <el-button v-if="can('weight.delete')" size="small" text type="danger" :disabled="row.is_default" @click="onDeleteWeight(row)">
                   删除
                 </el-button>
               </template>

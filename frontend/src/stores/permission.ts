@@ -59,5 +59,13 @@ export const usePermissionStore = defineStore('permission', () => {
     loaded.value = false
   }
 
-  return { codes, isAdmin, loaded, loading, allCodes, can, canAny, canAll, load, reset }
+  /**
+   * Force-refresh the permission set (call after role assignment or
+   * scope changes so the UI updates without re-login).
+   */
+  async function refresh(): Promise<void> {
+    await load(true)
+  }
+
+  return { codes, isAdmin, loaded, loading, allCodes, can, canAny, canAll, load, refresh, reset }
 })
