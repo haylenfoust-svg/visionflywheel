@@ -95,11 +95,10 @@ def admin_password_reset(
 @router.get("/auth/oauth/{provider}/authorize")
 def oauth_authorize(provider: str) -> dict:
     """Redirect URL for the OAuth provider. Currently raises 501."""
-    url = OAuthService.authorize_url(provider)
-    return {"authorize_url": url}
+    return OAuthService.authorize_url(provider)
 
 
 @router.get("/auth/oauth/{provider}/callback")
-def oauth_callback(provider: str, code: str, db: Session = Depends(get_db)) -> dict:
-    """OAuth callback. Currently raises 501 — provider not configured."""
-    return OAuthService.handle_callback(provider, code)
+def oauth_callback(provider: str, code: str, state: str | None = None, redirect_uri: str | None = None, db: Session = Depends(get_db)) -> dict:
+    """OAuth callback. Validates state then exchanges the code."""
+    return OAuthService.handle_callback(provider, code, state=state, redirect_uri=redirect_uri)

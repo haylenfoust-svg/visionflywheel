@@ -124,19 +124,64 @@ class TestPasswordReset:
         assert r2.status_code == 400
 
 
-class TestOAuthPlaceholder:
-    def test_authorize_raises_not_configured(self, client):
-        r = client.get("/api/auth/oauth/google/authorize")
-        # 501 = not implemented / not configured
-        assert r.status_code == 501
+class TestOAuth:
+    """OAuth flows — external HTTP is mocked; no network in tests."""
 
-    def test_callback_raises_not_configured(self, client):
-        r = client.get("/api/auth/oauth/github/callback?code=abc")
-        assert r.status_code == 501
+    def test_authorize_501_when_unconfigured(self, client, monkeypatch):
+        """Unconfigured provider raises 501 (config missing)."""
+        from app.core.config import get_settings
+        s = get_settings()
+        monkeypatch.setattr(s, "google_client_id", "")
+        monkeypatch.setattr(s, "github_client_id", "")
+        monkeypatch.setattr(s, "saml_sso_url", "")
+        for provider in ["google", "github", "saml"]:
+            r = client.get(f"/api/auth/oauth/{provider}/authorize")
+            assert r.status_code == 501, f"{provider} should be 501 when unconfigured"
+
+    def test_authorize_google_returns_url(self, client, monkeypatch):
+        """Configured Google provider returns a real authorize URL."""
+        from app.core.config import get_settings
+        s = get_settings()
+        monkeypatch.setattr(s, "google_client_id", "test-client-id")
+        monkeypatch.setattr(s, "google_client_secret", "test-secret")
+        r = client.get("/api/auth/oauth/google/authorize")
+        assert r.status_code == 200
+        data = r.json()["data"]
+        assert data["authorize_url"].startswith("https://accounts.google.com/")
+        assert "test-client-id" in data["authorize_url"]
+        assert "state=" in data["authorize_url"]
+
+    def test_authorize_github_returns_url(self, client, monkeypatch):
+        from app.core.config import get_settings
+        s = get_settings()
+        monkeypatch.setattr(s, "github_client_id", "gh-client-id")
+        monkeypatch.setattr(s, "github_client_secret", "gh-secret")
+        r = client.get("/api/auth/oauth/github/authorize")
+        assert r.status_code == 200
+        data = r.json()["data"]
+        assert data["authorize_url"].startswith("https://github.com/login/oauth/authorize")
+
+    def test_callback_state_mismatch_rejected(self, client, monkeypatch):
+        """State cache rejects mismatched provider before any HTTP."""
+        from app.core.config import get_settings
+        s = get_settings()
+        monkeypatch.setattr(s, "google_client_id", "g")
+        monkeypatch.setattr(s, "google_client_secret", "g")
+        r = client.get("/api/auth/oauth/google/authorize")
+        assert r.status_code == 200
+        url = r.json()["data"]["authorize_url"]
+        from urllib.parse import parse_qs, urlparse
+        state = parse_qs(urlparse(url).query).get("state", [""])[0]
+        assert state
+        # Use that state with a DIFFERENT provider -> 401 before HTTP
+        r2 = client.get(f"/api/auth/oauth/github/callback?code=x&state={state}")
+        assert r2.status_code == 401
 
     def test_unsupported_provider_rejected(self, client):
         r = client.get("/api/auth/oauth/myspace/authorize")
         assert r.status_code == 400
+        r2 = client.get("/api/auth/oauth/myspace/callback?code=x")
+        assert r2.status_code == 400
 
 
 class TestTrainingMetrics:
