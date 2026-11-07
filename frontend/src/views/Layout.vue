@@ -22,6 +22,7 @@ function onLogout() {
       <el-menu router :default-active="$route.path" class="menu">
         <el-menu-item index="/dashboard">控制台</el-menu-item>
         <el-menu-item index="/detect">识别</el-menu-item>
+        <el-menu-item index="/annotate">校正工作台</el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>

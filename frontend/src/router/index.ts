@@ -27,6 +27,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/Detect.vue'),
         meta: { title: '识别' },
       },
+      {
+        path: 'annotate',
+        name: 'annotate',
+        component: () => import('@/views/Annotate.vue'),
+        meta: { title: '校正工作台' },
+      },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/dashboard' },

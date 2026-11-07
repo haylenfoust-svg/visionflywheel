@@ -100,7 +100,118 @@ def main() -> int:
         assert r.status_code == 403, r.text
         print("[OK] weights never served")
 
-    print("\n[E2E] M1 + M2 smoke checks all passed.")
+        # ---------- M3: correction loop ----------
+        det_id = rows[0]["id"] if rows else None
+        if det_id is None:
+            print("[SKIP] no detections to correct")
+        else:
+            # confirm
+            r = c.post(
+                "/api/corrections",
+                headers=headers,
+                json={"action": "confirm", "detection_id": det_id},
+            )
+            assert r.status_code == 200, r.text
+            assert r.json()["data"]["detection_status"] == "corrected"
+            print(f"[OK] confirm -> corrected (det #{det_id})")
+
+            # relabel
+            r = c.post(
+                "/api/corrections",
+                headers=headers,
+                json={"action": "relabel", "detection_id": det_id, "new_class_name": "缺陷A"},
+            )
+            assert r.status_code == 200, r.text
+            r = c.get(f"/api/detections/{det_id}", headers=headers)
+            assert r.json()["data"]["class_name"] == "缺陷A"
+            print("[OK] relabel -> class_name=缺陷A")
+
+            # adjust
+            r = c.post(
+                "/api/corrections",
+                headers=headers,
+                json={
+                    "action": "adjust",
+                    "detection_id": det_id,
+                    "new_bbox": {"x1": 11.0, "y1": 22.0, "x2": 111.0, "y2": 122.0},
+                },
+            )
+            assert r.status_code == 200, r.text
+            r = c.get(f"/api/detections/{det_id}", headers=headers)
+            assert r.json()["data"]["bbox"]["x1"] == 11.0
+            print("[OK] adjust -> bbox updated")
+
+            # add a new box
+            r = c.post(
+                "/api/corrections",
+                headers=headers,
+                json={
+                    "action": "add",
+                    "task_id": task_id,
+                    "new_class_name": "补检",
+                    "new_bbox": {"x1": 200.0, "y1": 200.0, "x2": 300.0, "y2": 320.0},
+                },
+            )
+            assert r.status_code == 200, r.text
+            r = c.get(f"/api/tasks/{task_id}/detections", headers=headers)
+            assert any(d["source"] == "manual" for d in r.json()["data"])
+            print("[OK] add -> manual detection added")
+
+            # false_positive on another detection
+            if len(rows) > 1:
+                r = c.post(
+                    "/api/corrections",
+                    headers=headers,
+                    json={"action": "false_positive", "detection_id": rows[1]["id"]},
+                )
+                assert r.status_code == 200, r.text
+                assert r.json()["data"]["detection_status"] == "rejected"
+                print("[OK] false_positive -> rejected")
+
+            # audit trail (append-only)
+            r = c.get("/api/corrections/audit", headers=headers, params={"task_id": task_id})
+            assert r.status_code == 200, r.text
+            audit = r.json()["data"]["items"]
+            actions = {a["action"] for a in audit}
+            assert {"confirm", "relabel", "adjust", "add"} <= actions, actions
+            print(f"[OK] audit: {len(audit)} rows, actions={sorted(actions)}")
+
+            # undo the relabel (targeted)
+            relabel_row = next(a for a in audit if a["action"] == "relabel")
+            r = c.post(
+                "/api/corrections/undo",
+                headers=headers,
+                json={"correction_id": relabel_row["id"]},
+            )
+            assert r.status_code == 200, r.text
+            r = c.get(f"/api/detections/{det_id}", headers=headers)
+            assert r.json()["data"]["class_name"] != "缺陷A", "undo should have reverted the class"
+            print("[OK] undo -> class reverted")
+
+            # immutability
+            r = c.put(f"/api/corrections/{relabel_row['id']}", headers=headers, json={"action": "x"})
+            assert r.status_code == 403, r.text
+            assert r.json()["code"] == 40302
+            print("[OK] corrections are append-only (PUT 403)")
+
+        # feedback ticket
+        r = c.post(
+            "/api/feedback",
+            headers=headers,
+            json={"content": "这个结果需要复核", "task_id": task_id},
+        )
+        assert r.status_code == 201, r.text
+        tid = r.json()["data"]["id"]
+        r = c.put(
+            f"/api/feedback/{tid}/reply",
+            headers=headers,
+            json={"reply": "已复核，改为缺陷A"},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["data"]["status"] == "replied"
+        print(f"[OK] feedback ticket #{tid} created + replied")
+
+    print("\n[E2E] M1 + M2 + M3 smoke checks all passed.")
     return 0
 
 

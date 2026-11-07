@@ -25,8 +25,9 @@ ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = "admin-password-123"
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def engine():
+    """Fresh in-memory DB per test — keeps tests isolated."""
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -35,6 +36,7 @@ def engine():
     Base.metadata.create_all(bind=engine)
     yield engine
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
 @pytest.fixture
