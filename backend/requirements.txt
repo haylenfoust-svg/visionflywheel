@@ -1,0 +1,20 @@
+# VisionFlywheel backend — runtime dependencies (M1)
+# M2 起追加: ultralytics, torch, opencv-python, langchain, langgraph
+
+# Web
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.19
+
+# Data
+sqlalchemy==2.0.36
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# Auth
+python-jose[cryptography]==3.3.0
+passlib==1.7.4
+bcrypt==4.0.1  # passlib 1.7.4 与 bcrypt>=4.1 不兼容（hashpw 72-byte 限制）
+
+# Utils
+python-slugify==8.0.4

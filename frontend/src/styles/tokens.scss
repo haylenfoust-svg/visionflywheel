@@ -1,0 +1,66 @@
+/* Design tokens — keep this as the single source of truth for colors & spacing. */
+:root {
+  /* Palette */
+  --vf-bg: #f6f8fb;
+  --vf-surface: #ffffff;
+  --vf-ink: #1f2937;
+  --vf-ink-muted: #6b7280;
+  --vf-accent: #1976d2;
+  --vf-accent-strong: #1565c0;
+  --vf-accent-soft: #e3f2fd;
+  --vf-success: #2e7d32;
+  --vf-warn: #f57c00;
+  --vf-danger: #c62828;
+  --vf-border: #e5e7eb;
+
+  /* Typography */
+  --vf-font-sans: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  --vf-font-mono: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+
+  /* Spacing scale */
+  --vf-space-1: 4px;
+  --vf-space-2: 8px;
+  --vf-space-3: 12px;
+  --vf-space-4: 16px;
+  --vf-space-6: 24px;
+  --vf-space-8: 32px;
+
+  /* Radius */
+  --vf-radius: 8px;
+  --vf-radius-lg: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--vf-font-sans);
+  color: var(--vf-ink);
+  background: var(--vf-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--vf-accent);
+  text-decoration: none;
+}
+
+.page {
+  padding: var(--vf-space-6);
+}
+
+.card {
+  background: var(--vf-surface);
+  border: 1px solid var(--vf-border);
+  border-radius: var(--vf-radius-lg);
+  padding: var(--vf-space-6);
+}
