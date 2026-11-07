@@ -52,6 +52,12 @@ def db_session(engine):
 
 @pytest.fixture
 def client(engine, db_session):
+    """Client with an in-memory DB and the deterministic fallback detector."""
+    # Force the fallback detector so tests don't depend on pretrained weights
+    from app.services.detector_factory import force_fallback
+
+    force_fallback(True)
+
     def _override_get_db():
         try:
             yield db_session
@@ -74,6 +80,7 @@ def client(engine, db_session):
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+    force_fallback(False)
 
 
 @pytest.fixture

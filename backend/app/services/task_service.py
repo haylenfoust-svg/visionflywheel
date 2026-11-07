@@ -69,6 +69,13 @@ def run_image_task(
         upload_path = image_upload_path(task.id, filename)
         upload_path.write_bytes(file_bytes)
         image_rel = relative_to_runtime(upload_path)
+        # Store image path on the task so `action=add` can work even when
+        # the model produced zero detections (PRD FR-3.5).
+        task.meta = {
+            "image_path": image_rel,
+            "result_path": None,
+            "filename": safe_filename(filename),
+        }
 
         # Run detection
         started = time.perf_counter()
@@ -100,6 +107,9 @@ def run_image_task(
             result_path,
         )
         result_rel = relative_to_runtime(result_path)
+        if task.meta is None:
+            task.meta = {}
+        task.meta["result_path"] = result_rel
 
         # Persist detections
         for r, zh in enriched:

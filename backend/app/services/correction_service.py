@@ -134,16 +134,30 @@ def apply_correction(
         task = db.query(Task).filter(Task.id == payload.task_id).first()
         if task is None:
             raise AppError(Err.NOT_FOUND, f"task not found: {payload.task_id}", 404)
-        if not task.detections:
-            raise AppError(Err.CORRECTION_INVALID, "task has no detections to anchor an add", 422)
-        anchor = task.detections[0]
+
+        # Anchor the new box to the image path. Prefer an existing detection's
+        # image (which also carries item_index), else fall back to task.meta.
+        anchor = task.detections[0] if task.detections else None
+        if anchor is not None:
+            image_rel = anchor.image_path
+            result_rel = anchor.result_path
+            item_index = anchor.item_index
+            class_id = anchor.class_id
+        else:
+            meta = task.meta or {}
+            image_rel = meta.get("image_path")
+            result_rel = meta.get("result_path")
+            if not image_rel:
+                raise AppError(Err.CORRECTION_INVALID, "task has no image to anchor an add", 422)
+            item_index = 0
+            class_id = 0
 
         detection = Detection(
             task_id=payload.task_id,
-            item_index=anchor.item_index,
-            image_path=anchor.image_path,
-            result_path=anchor.result_path,
-            class_id=anchor.class_id,
+            item_index=item_index,
+            image_path=image_rel,
+            result_path=result_rel,
+            class_id=class_id,
             class_name=payload.new_class_name,
             class_name_zh=payload.new_class_name,
             confidence=1.0,

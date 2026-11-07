@@ -37,7 +37,12 @@ class YOLODetector:
         if not weights_dir.exists():
             weights_dir = Path("weights")
         if weights_dir.exists():
-            candidates = sorted(weights_dir.glob("*.pt"))
+            # Prefer non-trivial checkpoints; skip empty / obviously-broken files
+            candidates = sorted(
+                (p for p in weights_dir.glob("*.pt") if p.stat().st_size > 1_000_000),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
             if candidates:
                 return str(candidates[0])
         return None
@@ -62,7 +67,7 @@ class YOLODetector:
     def _ensure_model(self):
         if self._model is not None:
             return self._model
-        if not self._yolo_available():
+        if not _yolo_available():
             raise RuntimeError("ultralytics is not installed; run `pip install -r requirements-ml.txt`")
         if not self._weight_path:
             raise RuntimeError("no YOLO weights found under backend/weights/")
