@@ -1,0 +1,12 @@
+# Optional ML stack — real YOLO inference + training.
+# Install ONLY when you need real YOLO; the fallback detector works without these.
+#
+#   pip install -r requirements-ml.txt
+#
+# For CPU-only torch (no CUDA), follow: https://pytorch.org/get-started/locally/
+
+ultralytics==8.3.53
+# torch / torchvision are pulled in by ultralytics; pin below only if you need
+# a specific build (e.g. CPU-only):
+# torch==2.5.1
+# torchvision==0.20.1

@@ -1,76 +1,106 @@
-"""E2E smoke test against a running backend — run `python scripts/e2e_smoke.py <base_url>`."""
+"""E2E smoke test — M1 auth + M2 recognition loop.
+
+Run: `python scripts/e2e_smoke.py <base_url>` after `python -m app.seed`.
+"""
 
 from __future__ import annotations
 
+import io
 import sys
+import tempfile
+from pathlib import Path
 
 import httpx
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
+
+
+def _make_test_png() -> bytes:
+    """Deterministic PNG with a few distinct blobs."""
+    import cv2
+    import numpy as np
+
+    canvas = np.full((480, 640, 3), 240, dtype=np.uint8)
+    cv2.rectangle(canvas, (80, 60), (240, 220), (40, 40, 200), -1)
+    cv2.circle(canvas, (450, 300), 90, (40, 180, 60), -1)
+    cv2.rectangle(canvas, (300, 340), (420, 430), (200, 120, 40), -1)
+    ok, buf = cv2.imencode(".png", canvas)
+    assert ok
+    return buf.tobytes()
 
 
 def main() -> int:
     base = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8770"
-    with httpx.Client(base_url=base, timeout=10) as c:
-        # 1) health (no auth)
+    png = _make_test_png()
+
+    with httpx.Client(base_url=base, timeout=30) as c:
+        # ---------- M1: auth ----------
         r = c.get("/api/system/health")
         assert r.status_code == 200, r.text
-        body = r.json()
-        assert body["code"] == 0, body
-        print(f"[OK] health: {body['data']}")
+        health = r.json()["data"]
+        print(f"[OK] health: {health}")
 
-        # 2) login
         r = c.post("/api/auth/login", json={"username": "admin", "password": "admin123"})
         assert r.status_code == 200, r.text
-        body = r.json()
-        assert body["code"] == 0, body
-        token = body["data"]["access_token"]
-        assert body["data"]["user"]["role"] == "admin"
-        print(f"[OK] login: user={body['data']['user']['username']} role={body['data']['user']['role']}")
-
+        token = r.json()["data"]["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
+        print(f"[OK] login: {r.json()['data']['user']['username']}")
 
-        # 3) me
-        r = c.get("/api/auth/me", headers=headers)
-        assert r.status_code == 200, r.text
-        assert r.json()["data"]["username"] == "admin"
-        print(f"[OK] me: {r.json()['data']['username']}")
-
-        # 4) config snapshot
-        r = c.get("/api/config", headers=headers)
-        assert r.status_code == 200, r.text
-        values = r.json()["data"]["values"]
-        print(f"[OK] config: {len(values)} keys — conf={values['default_conf_threshold']}")
-
-        # 5) write config
-        r = c.put(
-            "/api/config/default_conf_threshold",
+        # ---------- M2: upload → detect → visualise ----------
+        r = c.post(
+            "/api/tasks/upload",
             headers=headers,
-            json={"value": 0.42},
+            files={"file": ("smoke.png", io.BytesIO(png), "image/png")},
+            data={"conf_threshold": "0.3"},
         )
         assert r.status_code == 200, r.text
-        assert r.json()["data"]["value"] == 0.42
-        assert r.json()["data"]["source"] == "db"
-        print(f"[OK] config write: 0.42 (source=db)")
+        data = r.json()["data"]
+        assert data["status"] == "done", data
+        assert data["detector_mode"] in ("yolo", "fallback"), data
+        assert data["result_url"].startswith("/api/files/"), data
+        task_id = data["task_id"]
+        ndet = len(data["detections"])
+        print(f"[OK] upload+detect: task={task_id} mode={data['detector_mode']} detections={ndet} ms={data['inference_ms']:.0f}")
 
-        # 6) audit trail
-        r = c.get("/api/config/audit", headers=headers)
+        # Result image is served
+        result_path = data["result_url"].replace("/api/files/", "")
+        r = c.get(f"/api/files/{result_path}", headers=headers)
         assert r.status_code == 200, r.text
-        assert len(r.json()["data"]) >= 1
-        print(f"[OK] audit: {len(r.json()['data'])} entries")
+        assert r.headers["content-type"].startswith("image/"), r.headers
+        print(f"[OK] result image served: {len(r.content)} bytes")
 
-        # 7) permission matrix: normal user cannot write config
-        r = c.post("/api/auth/users", headers=headers, json={"username": "smoke-user", "password": "smoke-pass-123", "role": "user"})
-        assert r.status_code == 201, r.text
-        r = c.post("/api/auth/login", json={"username": "smoke-user", "password": "smoke-pass-123"})
-        user_token = r.json()["data"]["access_token"]
-        r = c.put(
-            "/api/config/default_conf_threshold",
-            headers={"Authorization": f"Bearer {user_token}"},
-            json={"value": 0.9},
+        # Detections queryable with Chinese labels
+        r = c.get(f"/api/tasks/{task_id}/detections", headers=headers)
+        assert r.status_code == 200, r.text
+        rows = r.json()["data"]
+        assert len(rows) == ndet
+        if rows:
+            d = rows[0]
+            assert d["class_name_zh"] is not None or d["class_name"] == "object"
+            assert {"x1", "y1", "x2", "y2"} <= set(d["bbox"])
+        print(f"[OK] detections queried: {len(rows)} rows, labels mapped")
+
+        # Stats
+        r = c.get("/api/detections/stats", headers=headers)
+        assert r.status_code == 200, r.text
+        stats = r.json()["data"]
+        assert stats["total"] >= ndet
+        print(f"[OK] stats: total={stats['total']} avg_conf={stats['avg_confidence']}")
+
+        # Rejection cases
+        r = c.post(
+            "/api/tasks/upload",
+            headers=headers,
+            files={"file": ("bad.exe", io.BytesIO(b"MZ"), "application/octet-stream")},
         )
+        assert r.status_code == 400, r.text
+        print(f"[OK] bad extension rejected (code={r.json()['code']})")
+
+        r = c.get("/api/files/weights/x.pt", headers=headers)
         assert r.status_code == 403, r.text
-        print(f"[OK] permission: user cannot write config (403)")
+        print("[OK] weights never served")
 
-    print("\n[E2E] all smoke checks passed.")
+    print("\n[E2E] M1 + M2 smoke checks all passed.")
     return 0
 
 

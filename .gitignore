@@ -44,6 +44,8 @@ dist/
 # vue-tsc -b / tsc 误 emit 的构建产物
 *.vue.js
 vite.config.js
+# src 下的 .js 是 tsc 误产物（项目是纯 TS/Vue）；Vite 会优先解析 .js 导致打到过期代码
+frontend/src/**/*.js
 
 # ===== 环境与密钥 =====
 .env
@@ -72,6 +74,10 @@ Thumbs.db
 # ===== 日志 =====
 *.log
 logs/
+server.log
+server.err
+fe.log
+fe.err
 
 # ===== 临时文件 =====
 *.tmp

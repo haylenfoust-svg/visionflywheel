@@ -10,6 +10,15 @@ from app.schemas.config import (
     HealthOut,
     SystemInfoOut,
 )
+from app.schemas.detection import (
+    BatchUploadResult,
+    DetectionOut,
+    DetectionStats,
+    DetectParams,
+    TaskOut,
+    TaskProgress,
+    UploadResult,
+)
 
 __all__ = [
     "ApiFailure",
@@ -27,4 +36,11 @@ __all__ = [
     "AuditOut",
     "HealthOut",
     "SystemInfoOut",
+    "DetectionOut",
+    "TaskOut",
+    "UploadResult",
+    "BatchUploadResult",
+    "TaskProgress",
+    "DetectParams",
+    "DetectionStats",
 ]

@@ -30,10 +30,12 @@ def health(db: Session = Depends(get_db)) -> HealthOut:
         db.execute(text("SELECT 1"))
     except Exception:
         db_status = "error"
+    from app.services.detector_factory import detector_mode
+
     return HealthOut(
         status="healthy" if db_status == "ok" else "degraded",
         version=settings.version,
-        detector_mode="yolo",  # M2 起由 yolo_service 决定
+        detector_mode=detector_mode(),
         db=db_status,
     )
 
@@ -43,9 +45,11 @@ def info(user: CurrentUser, db: Session = Depends(get_db)) -> SystemInfoOut:
     settings = get_settings()
     cfg = get_config_service()
     weight_id = cfg.get(db, "default_weight_id")
+    from app.services.detector_factory import detector_mode
+
     return SystemInfoOut(
         version=settings.version,
-        detector_mode="yolo",
+        detector_mode=detector_mode(),
         default_weight_id=weight_id if isinstance(weight_id, int) else None,
         enable_fallback_detector=bool(cfg.get(db, "enable_fallback_detector")),
         role=user.role,

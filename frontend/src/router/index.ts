@@ -21,6 +21,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/Dashboard.vue'),
         meta: { title: '控制台' },
       },
+      {
+        path: 'detect',
+        name: 'detect',
+        component: () => import('@/views/Detect.vue'),
+        meta: { title: '识别' },
+      },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
