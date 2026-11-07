@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
+import { canvas as canvasTokens } from '@/styles/tokens'
+
 import type { BBox, Detection } from '@/types/detection'
 
 /**
@@ -160,7 +162,7 @@ function render() {
   for (const det of props.detections) {
     const d = toDisplay(det.bbox)
     const isSelected = det.id === props.selectedId
-    const color = det.status === 'rejected' ? '#c62828' : det.status === 'corrected' ? '#2e7d32' : '#1976d2'
+    const color = det.status === 'rejected' ? canvasTokens.strokeAlt : det.status === 'corrected' ? canvasTokens.strokeOk : canvasTokens.stroke
     ctx.strokeStyle = color
     ctx.lineWidth = isSelected ? 3 : 2
     ctx.strokeRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1)
@@ -172,11 +174,11 @@ function render() {
     const ty = Math.max(0, d.y1 - th)
     ctx.fillStyle = color
     ctx.fillRect(d.x1, ty, tw + 8, th)
-    ctx.fillStyle = '#ffffff'
+    ctx.fillStyle = canvasTokens.fill
     ctx.fillText(label, d.x1 + 4, ty + 12)
 
     if (isSelected && props.interactive) {
-      ctx.fillStyle = '#ffffff'
+      ctx.fillStyle = canvasTokens.fill
       ctx.strokeStyle = color
       const hs = HANDLE_SIZE / 2
       const corners: Array<[number, number]> = [
@@ -195,11 +197,11 @@ function render() {
   if (draftBox.value) {
     const d = toDisplay(draftBox.value)
     ctx.setLineDash([6, 4])
-    ctx.strokeStyle = '#1976d2'
+    ctx.strokeStyle = canvasTokens.stroke
     ctx.lineWidth = 2
     ctx.strokeRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1)
     ctx.setLineDash([])
-    ctx.fillStyle = 'rgba(25, 118, 210, 0.12)'
+    ctx.fillStyle = canvasTokens.draftFill
     ctx.fillRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1)
   }
 }

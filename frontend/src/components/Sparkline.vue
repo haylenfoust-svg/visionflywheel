@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import { token } from '@/styles/tokens'
+
 /**
  * Sparkline — tiny inline trend line. Fits inside a table cell or stat card.
  */
@@ -13,7 +15,7 @@ const props = withDefaults(
     showArea?: boolean
   }>(),
   {
-    color: '#6366f1',
+    color: token('chart-primary'),
     width: 100,
     height: 28,
     showArea: true,

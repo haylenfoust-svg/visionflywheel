@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 
+import { token } from '@/styles/tokens'
+
 /**
  * LineChart — animated area/line chart with hover tooltip and axis labels.
  * Self-contained SVG (no deps) so the bundle stays small and consistent.
@@ -18,8 +20,8 @@ const props = withDefaults(
   }>(),
   {
     title: '',
-    color: '#6366f1',
-    fillColor: 'rgba(99, 102, 241, 0.14)',
+    color: token('chart-primary'),
+    fillColor: token('chart-fill'),
     height: 220,
     showDots: true,
     showArea: true,
@@ -140,7 +142,7 @@ function onLeave() {
             :cx="x(i)"
             :cy="y(d.value)"
             :r="hoveredIndex === i ? 5 : 3"
-            :fill="hoveredIndex === i ? color : '#fff'"
+            :fill="hoveredIndex === i ? color : token('canvas-fill')"
             :stroke="color"
             stroke-width="1.8"
             class="dot"

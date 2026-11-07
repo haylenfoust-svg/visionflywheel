@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 
+import { token } from '@/styles/tokens'
+
 /**
  * DonutChart — proportional donut with hover segment + center total.
  */
@@ -28,7 +30,7 @@ const total = computed(() => props.data.reduce((a, b) => a + b.value, 0) || 1)
 const radius = computed(() => (props.size - props.thickness) / 2)
 const circumference = computed(() => 2 * Math.PI * radius.value)
 
-const palette = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#a855f7', '#ec4899', '#14b8a6']
+const palette = [token('chart-primary'), token('chart-success'), token('chart-warning'), token('chart-danger'), token('chart-info'), token('chart-accent'), token('chart-primary'), token('chart-success')]
 
 function colorAt(i: number, override?: string): string {
   return override ?? palette[i % palette.length]

@@ -18,6 +18,7 @@ import Sparkline from '@/components/Sparkline.vue'
 import StatCard from '@/components/StatCard.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import { useAuthStore } from '@/stores/auth'
+import { token } from '@/styles/tokens'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -125,9 +126,9 @@ const statusDonut = computed(() => {
     rejected: '已否决',
   }
   const colorMap: Record<string, string> = {
-    pending: '#f59e0b',
-    corrected: '#10b981',
-    rejected: '#ef4444',
+    pending: token('chart-warning'),
+    corrected: token('chart-success'),
+    rejected: token('chart-danger'),
   }
   return Object.entries(s).map(([k, v]) => ({
     label: labelMap[k] ?? k,
@@ -282,7 +283,7 @@ onMounted(refresh)
             <LineChart
               :data="detectTrendData"
               color="var(--c-primary-500)"
-              fill-color="rgba(99, 102, 241, 0.12)"
+              fill-color="token('chart-fill')"
               :height="240"
             />
             <div class="chart-lg__spark">
@@ -314,7 +315,7 @@ onMounted(refresh)
           <LineChart
             :data="corrTrendData"
             color="var(--c-success-500)"
-            fill-color="rgba(16, 185, 129, 0.12)"
+            fill-color="token('chart-fill-alt')"
             :height="200"
           />
         </AppCard>

@@ -27,6 +27,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import StatCard from '@/components/StatCard.vue'
 import { usePermissions } from '@/composables/usePermissions'
+import { token } from '@/styles/tokens'
 import { apiGet } from '@/api/http'
 
 const pending = ref<DatasetPending | null>(null)
@@ -658,7 +659,7 @@ onMounted(refresh)
                 <h4>基准：mAP50-95</h4>
                 <LineChart
                   :data="metricsBase.epochs.map((e: any) => ({ label: String(e.epoch), value: e.map50_95 || 0 }))"
-                  color="#6366f1"
+                  :color="token('chart-primary')"
                   :height="180"
                   :show-dots="false"
                 />
@@ -667,7 +668,7 @@ onMounted(refresh)
                 <h4>对比：mAP50-95</h4>
                 <LineChart
                   :data="metricsTarget.epochs.map((e: any) => ({ label: String(e.epoch), value: e.map50_95 || 0 }))"
-                  color="#10b981"
+                  :color="token('chart-success')"
                   :height="180"
                   :show-dots="false"
                 />

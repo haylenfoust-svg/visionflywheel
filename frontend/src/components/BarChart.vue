@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import { token } from '@/styles/tokens'
+
 /** Tiny inline SVG bar chart — no external deps, keeps bundle small. */
 const props = withDefaults(
   defineProps<{
@@ -10,7 +12,7 @@ const props = withDefaults(
     height?: number
     showValues?: boolean
   }>(),
-  { title: '', color: '#1976d2', height: 160, showValues: true },
+  { title: '', color: token('chart-primary'), height: 160, showValues: true },
 )
 
 const padX = 32

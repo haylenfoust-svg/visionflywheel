@@ -896,7 +896,7 @@ onMounted(refresh)
   width: 14px; height: 14px;
   border-radius: var(--r-full);
   border: none;
-  background: rgba(0, 0, 0, 0.1);
+  background: var(--c-neutral-200);
   color: inherit;
   font-size: 10px;
   line-height: 1;

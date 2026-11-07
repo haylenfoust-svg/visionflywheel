@@ -164,6 +164,28 @@
   --el-border-color-lighter: var(--border-default);
   --el-fill-color-blank: var(--bg-surface);
   --el-bg-color-page: var(--bg-app);
+
+  /* ---------- 图表色（按角色命名，非值命名） ---------- */
+  --chart-primary:   var(--c-primary-500);
+  --chart-success:   var(--c-success-500);
+  --chart-warning:   var(--c-warning-500);
+  --chart-danger:    var(--c-danger-500);
+  --chart-info:      var(--c-info-500);
+  --chart-accent:    var(--c-primary-400);
+  --chart-fill:      rgba(99, 102, 241, 0.12);
+  --chart-fill-alt:  rgba(16, 185, 129, 0.12);
+  --chart-fill-warn: rgba(245, 158, 11, 0.12);
+  --chart-fill-danger: rgba(239, 68, 68, 0.12);
+
+  /* ---------- Canvas 绘制色（标注工作台） ---------- */
+  --canvas-stroke:        var(--c-primary-500);
+  --canvas-stroke-alt:    var(--c-danger-500);
+  --canvas-stroke-ok:     var(--c-success-500);
+  --canvas-stroke-warn:   var(--c-warning-500);
+  --canvas-fill:          #ffffff;
+  --canvas-draft:         var(--c-primary-500);
+  --canvas-draft-fill:    rgba(25, 118, 210, 0.12);
+  --canvas-handle:        #ffffff;
 }
 
 /* 深色模式（供未来扩展，暂未启用） */

@@ -416,7 +416,7 @@ async function onSubmit() {
 
 .spinner {
   width: 16px; height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid var(--c-neutral-300);
   border-top-color: white;
   border-radius: var(--r-full);
   animation: spin 0.7s linear infinite;
