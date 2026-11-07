@@ -27,6 +27,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import SkeletonBlock from '@/components/SkeletonBlock.vue'
 import StatCard from '@/components/StatCard.vue'
 import { usePermissions } from '@/composables/usePermissions'
+import { apiGet } from '@/api/http'
 
 const pending = ref<DatasetPending | null>(null)
 const exports = ref<DatasetExportRow[]>([])
@@ -56,6 +57,27 @@ const compareTarget = ref<number | null>(null)
 const comparison = ref<WeightComparison | null>(null)
 const history = ref<WeightSnapshot[]>([])
 const compareLoading = ref(false)
+const metricsBase = ref<any>(null)
+const metricsTarget = ref<any>(null)
+const metricsLoading = ref(false)
+
+async function loadMetrics() {
+  if (!compareBase.value || !compareTarget.value) return
+  metricsLoading.value = true
+  try {
+    const [b, t] = await Promise.all([
+      apiGet(`/api/weights/${compareBase.value}/metrics`),
+      apiGet(`/api/weights/${compareTarget.value}/metrics`),
+    ])
+    metricsBase.value = b
+    metricsTarget.value = t
+  } catch {
+    metricsBase.value = null
+    metricsTarget.value = null
+  } finally {
+    metricsLoading.value = false
+  }
+}
 
 async function openCompare() {
   compareOpen.value = true
@@ -72,6 +94,7 @@ async function runCompare() {
   compareLoading.value = true
   try {
     comparison.value = await compareWeights(compareBase.value, compareTarget.value)
+    await loadMetrics()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '对比失败')
   } finally {
@@ -624,6 +647,41 @@ onMounted(refresh)
             <div class="compare-delta__row">
               <span>类别数一致：</span>
               <span>{{ comparison.delta.same_classes ? '✓' : '✗' }}</span>
+            </div>
+          </div>
+
+          <!-- 训练曲线 (M4 / P2.1) -->
+          <div v-if="metricsBase?.summary?.has_curves || metricsTarget?.summary?.has_curves" class="compare-curves">
+            <div class="compare-delta__title">训练曲线</div>
+            <div class="curves-grid">
+              <div v-if="metricsBase?.epochs?.length" class="curve-box">
+                <h4>基准：mAP50-95</h4>
+                <LineChart
+                  :data="metricsBase.epochs.map((e: any) => ({ label: String(e.epoch), value: e.map50_95 || 0 }))"
+                  color="#6366f1"
+                  :height="180"
+                  :show-dots="false"
+                />
+              </div>
+              <div v-if="metricsTarget?.epochs?.length" class="curve-box">
+                <h4>对比：mAP50-95</h4>
+                <LineChart
+                  :data="metricsTarget.epochs.map((e: any) => ({ label: String(e.epoch), value: e.map50_95 || 0 }))"
+                  color="#10b981"
+                  :height="180"
+                  :show-dots="false"
+                />
+              </div>
+            </div>
+            <div v-if="metricsBase?.summary || metricsTarget?.summary" class="curves-summary">
+              <div v-if="metricsBase?.summary" class="summary-item">
+                <span class="label">基准最终 mAP</span>
+                <span class="value num">{{ metricsBase.summary.final_map50_95?.toFixed(4) ?? '—' }}</span>
+              </div>
+              <div v-if="metricsTarget?.summary" class="summary-item">
+                <span class="label">对比最终 mAP</span>
+                <span class="value num">{{ metricsTarget.summary.final_map50_95?.toFixed(4) ?? '—' }}</span>
+              </div>
             </div>
           </div>
 

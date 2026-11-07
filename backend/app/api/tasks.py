@@ -190,6 +190,49 @@ def get_detection(
     return _to_detection_out(row)
 
 
+@router.post("/tasks/video")
+async def video_detect(
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+    file: UploadFile = File(...),
+    fps: int = Form(default=2),
+    conf_threshold: float | None = Form(default=None),
+    iou_threshold: float | None = Form(default=None),
+    _perm: object = Depends(require_permission("task.write")),
+) -> dict:
+    """Video frame extraction + detection (M6)."""
+    import tempfile
+    from pathlib import Path
+
+    from app.services.video_service import detect_video
+
+    if not file.filename:
+        raise AppError(Err.VALIDATION, "filename is required", 400)
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in {".mp4", ".avi", ".mov", ".mkv"}:
+        raise AppError(Err.UNSUPPORTED_FILE, f"unsupported video type: {suffix}", 400)
+
+    data = await file.read()
+    if len(data) > 500 * 1024 * 1024:
+        raise AppError(Err.FILE_TOO_LARGE, "video exceeds 500 MB limit", 400)
+
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(data)
+        tmp_path = tmp.name
+
+    try:
+        result = detect_video(
+            tmp_path,
+            fps=max(1, min(fps, 10)),
+            conf=conf_threshold if conf_threshold is not None else 0.5,
+            iou=iou_threshold if iou_threshold is not None else 0.45,
+        )
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+    return result
+
+
 @router.get("/files/{file_path:path}")
 def read_file(
     file_path: str,
