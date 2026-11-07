@@ -5,6 +5,7 @@ import 'element-plus/dist/index.css'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 
 import App from './App.vue'
+import { i18n } from './i18n'
 import router from './router'
 import { vPerm } from './composables/usePermissions'
 import '@/styles/design-system.scss'
@@ -12,6 +13,7 @@ import '@/styles/design-system.scss'
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
+app.use(i18n)
 app.use(ElementPlus, { locale: zhCn })
 app.directive('perm', vPerm)
 app.mount('#app')
