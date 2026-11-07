@@ -9,6 +9,7 @@ from app.api import (
     chat,
     corrections,
     dataset,
+    p2,
     rbac,
     security,
     stats,
@@ -29,3 +30,4 @@ api_router.include_router(stats.router)
 api_router.include_router(chat.router)
 api_router.include_router(rbac.router)
 api_router.include_router(api_keys.router)
+api_router.include_router(p2.router)
