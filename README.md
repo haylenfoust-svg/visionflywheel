@@ -35,11 +35,11 @@
 | 里程碑 | 内容 | 状态 |
 |---|---|---|
 | **M1** | 骨架：FastAPI + JWT + Vue3 登录、权限、配置中心 | ✅ 完成 |
-| **M2** | 识别主链：上传 → YOLO 推理 → 落库 → 可视化 | ⏳ |
-| **M3** | 校正闭环：Canvas 五种校正动作 + 审计流水 | ⏳ |
-| **M4** | 导出与回流：YOLO 训练集 + 增量训练 + 权重热切换 | ⏳ |
-| **M5** | 智能分析：LangGraph + RAG 问答 | ⏳ |
-| **M6** | 加固交付：批量/视频 + 降级 + Docker | ⏳ |
+| **M2** | 识别主链：上传 → YOLO 推理 → 落库 → 可视化 | ✅ 完成 |
+| **M3** | 校正闭环：Canvas 五种校正动作 + 审计流水 | ✅ 完成 |
+| **M4** | 导出与回流：YOLO 训练集 + 增量训练 + 权重热切换 | ✅ 完成 |
+| **M5** | 智能分析：LangGraph + RAG 问答、Dashboard、Admin、批量、Docker | ✅ 完成 |
+| **M6** | 真 YOLO 集成、视频识别、生产加固 | 🔄 部分 |
 
 ---
 
@@ -77,6 +77,29 @@ npm run dev
 打开 <http://localhost:5173>，用 `admin / admin123` 登录。
 
 > ⚠️ `admin123` 是开发默认密码，**生产部署前务必改掉**。
+
+### 3. （可选）装真 YOLO
+
+默认用内置降级检测器（OpenCV 规则）——**无需 GPU 也能跑完整闭环**。想用真 YOLO：
+
+```bash
+cd backend
+pip install -r requirements-ml.txt       # 拉 ultralytics + torch（约 2 GB）
+# 下载预训练权重 yolov8n.pt 放到 backend/weights/
+```
+
+重启后自动识别并切换到 YOLO 推理（页面顶部会显示 "YOLO" 而不是 "降级检测器"）。
+
+### 4. （可选）Docker 一键起
+
+```bash
+docker compose up --build
+```
+
+- 前端：<http://localhost:8080>
+- 后端 API：<http://localhost:8000/docs>
+
+需要真 YOLO 时：`WITH_ML=1 docker compose build backend`。
 
 ---
 
@@ -168,23 +191,33 @@ refactor: 重构      test: 测试       chore: 工程化
 
 ---
 
-## 核心能力（路线图）
+## 核心能力
 
 ### 已支持
 
-- ✅ 用户名密码登录、JWT、角色权限（`user` / `admin`）
-- ✅ 配置三级优先级：**数据库 > 环境变量 > 代码默认**（热更新、审计可查）
-- ✅ 统一响应信封、稳定错误码、统一异常处理
+- ✅ **完整闭环**：上传识别 → 可视化 → 五种校正 → 导出 YOLO 训练集 → 训练 → 权重热切换
+- ✅ **可插拔检测器**：YOLO（ultralytics）+ 内置降级检测器（ADR-002），无 GPU 也能跑闭环
+- ✅ **Canvas 标注**：拖拽移动 / 四角缩放 / 空白补框 / 五种校正动作 / undo
+- ✅ **审计流水**：只追加不修改，撤销也留痕
+- ✅ **YOLO 标准导出**：`data.yaml` + `images/{train,val}` + `labels/{train,val}`，标签归一化
+- ✅ **holdout 评估集冻结**：永不参与训练，权重记录 `holdout_map` 基线
+- ✅ **权重热切换**：切换默认权重即刻生效，`requires_restart=false`
+- ✅ **中英标签映射**：`dog` → 「狗」，可配置
+- ✅ **配置三级优先级**：DB > env > 默认，页面改即生效
+- ✅ **批量上传**：多图拖拽 + 进度条
+- ✅ **智能分析**：基于真实识别统计的问答 + 知识库沉淀 + 反思自检
+- ✅ **Dashboard**：6 统计卡 + 4 趋势/分布图 + 状态分布 + 最近活动
+- ✅ **Admin 面板**：用户管理 / 系统配置 / 审计日志 / 反馈工单
+- ✅ **Docker Compose**：一键起前后端
+- ✅ **JWT + 角色权限**：user / admin 两层
+- ✅ **稳定错误码**：统一响应信封，40+ API
 
 ### 计划中
 
-- ⏳ 上传识别（单图 / 批量 / 视频抽帧），YOLO 权重与阈值可配
-- ⏳ Canvas 人工校正（确认 / 改标签 / 标误检 / 拖拽改框 / 补框）
-- ⏳ 一键导出标准 YOLO 训练集，`yolo detect train` 直接可训
-- ⏳ 权重热切换（不重启服务）+ 增量训练回流
-- ⏳ 中英标签映射（`dog` → 「狗」），业务方免翻译
-- ⏳ 无 GPU / 装不上 torch 时降级检测器，闭环仍可跑
-- ⏳ LangGraph + RAG 智能分析（基于真实识别统计做量化问答）
+- ⏳ 视频抽帧识别
+- ⏳ LangGraph 真 LLM 通路（当前有可选降级到模板回答）
+- ⏳ Webhook / IM 通知
+- ⏳ 数据漂移检测
 
 ---
 

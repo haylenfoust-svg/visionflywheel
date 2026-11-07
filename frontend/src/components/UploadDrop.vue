@@ -6,15 +6,18 @@ const props = withDefaults(
   defineProps<{
     disabled?: boolean
     accept?: string
+    multiple?: boolean
   }>(),
   {
     disabled: false,
     accept: 'image/png,image/jpeg,image/jpg,image/bmp,image/webp',
+    multiple: true,
   },
 )
 
 const emit = defineEmits<{
   (e: 'select', file: File): void
+  (e: 'select-many', files: File[]): void
 }>()
 
 const isDragging = ref(false)
@@ -27,9 +30,13 @@ function onPick() {
 
 function onFileChange(event: Event) {
   const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (file) {
-    emit('select', file)
+  const files = Array.from(target.files ?? [])
+  if (files.length === 0) return
+  if (files.length === 1 && !props.multiple) {
+    emit('select', files[0])
+  } else {
+    emit('select-many', files)
+    if (files.length === 1) emit('select', files[0])
   }
   target.value = ''
 }
@@ -37,13 +44,18 @@ function onFileChange(event: Event) {
 function onDrop(event: DragEvent) {
   isDragging.value = false
   if (props.disabled) return
-  const file = event.dataTransfer?.files?.[0]
-  if (!file) return
-  if (!file.type.startsWith('image/')) {
+  const files = Array.from(event.dataTransfer?.files ?? [])
+  const images = files.filter((f) => f.type.startsWith('image/'))
+  if (images.length === 0) {
     ElMessage.warning('只支持图片文件')
     return
   }
-  emit('select', file)
+  if (images.length === 1 && !props.multiple) {
+    emit('select', images[0])
+  } else {
+    emit('select-many', images)
+    if (images.length === 1) emit('select', images[0])
+  }
 }
 </script>
 
@@ -56,11 +68,14 @@ function onDrop(event: DragEvent) {
     @drop.prevent="onDrop"
     @click="onPick"
   >
-    <input ref="inputRef" type="file" :accept="accept" class="hidden-input" @change="onFileChange" />
+    <input ref="inputRef" type="file" :accept="accept" :multiple="multiple" class="hidden-input" @change="onFileChange" />
     <div class="icon">📁</div>
     <div class="text">
-      <p class="main">拖拽图片到这里，或 <span class="link">点击选择</span></p>
-      <p class="hint">支持 JPG / PNG / BMP / WebP，单张 ≤ 20 MB</p>
+      <p class="main">
+        拖拽图片到这里，或 <span class="link">点击选择</span>
+        <template v-if="multiple">（可多选）</template>
+      </p>
+      <p class="hint">支持 JPG / PNG / BMP / WebP，单张 ≤ 20 MB{{ multiple ? '，一次最多 50 张' : '' }}</p>
     </div>
   </div>
 </template>

@@ -1,0 +1,41 @@
+# VisionFlywheel — one-command bring-up
+#
+#   docker compose up --build
+#
+# Then open http://localhost:8080 (frontend) or http://localhost:8000/docs (API).
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        # Set to 1 to install ultralytics + torch (adds ~2 GB to the image)
+        WITH_ML: ${WITH_ML:-0}
+    container_name: visionflywheel-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - VF_SECRET_KEY=${VF_SECRET_KEY:-change-me-in-prod}
+      - VF_DATABASE_URL=sqlite:////app/runtime_data/app.db
+      - VF_CORS_ORIGINS=["http://localhost:8080","http://127.0.0.1:8080"]
+      - VF_ENABLE_FALLBACK_DETECTOR=${VF_ENABLE_FALLBACK_DETECTOR:-true}
+    volumes:
+      # Persist runtime state across container restarts
+      - ./runtime_data:/app/runtime_data
+      - ./backend/weights:/app/backend/weights
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/system/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: visionflywheel-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend

@@ -78,6 +78,8 @@ server.log
 server.err
 fe.log
 fe.err
+ml-install.log
+ml-install.err
 
 # ===== 临时文件 =====
 *.tmp

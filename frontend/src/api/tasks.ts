@@ -21,6 +21,24 @@ export async function uploadAndDetect(
   return resp.data.data
 }
 
+export async function batchUpload(
+  files: File[],
+  params: DetectParams = {},
+): Promise<{ task_ids: number[]; status: string; total_items: number }> {
+  const form = new FormData()
+  for (const f of files) form.append('files', f)
+  if (params.conf_threshold != null) form.append('conf_threshold', String(params.conf_threshold))
+  if (params.iou_threshold != null) form.append('iou_threshold', String(params.iou_threshold))
+  if (params.imgsz != null) form.append('imgsz', String(params.imgsz))
+
+  const resp = await http.post<ApiResponse<{ task_ids: number[]; status: string; total_items: number }>>(
+    '/api/tasks/batch',
+    form,
+    { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 600_000 },
+  )
+  return resp.data.data
+}
+
 export async function listTasks(opts: { page?: number; pageSize?: number; mine?: boolean } = {}): Promise<Page<Task>> {
   const params: Record<string, unknown> = {}
   if (opts.page) params.page = opts.page

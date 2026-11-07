@@ -2,7 +2,7 @@
 import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
-import { uploadAndDetect } from '@/api/tasks'
+import { batchUpload, uploadAndDetect } from '@/api/tasks'
 import DetectionTable from '@/components/DetectionTable.vue'
 import UploadDrop from '@/components/UploadDrop.vue'
 import type { Detection, UploadResult } from '@/types/detection'
@@ -17,6 +17,8 @@ const loading = ref(false)
 const result = ref<UploadResult | null>(null)
 const selected = ref<Detection | null>(null)
 const previewUrl = ref<string>('')
+const batchProgress = ref<{ done: number; total: number } | null>(null)
+const recentBatch = ref<Array<{ taskId: number; count: number }>>([])
 
 const detectorTag = computed(() => {
   const mode = result.value?.detector_mode
@@ -49,6 +51,31 @@ async function onFile(file: File) {
   }
 }
 
+async function onBatch(files: File[]) {
+  if (loading.value || files.length === 0) return
+  if (files.length === 1) return onFile(files[0])
+  loading.value = true
+  batchProgress.value = { done: 0, total: files.length }
+  try {
+    const res = await batchUpload(files, {
+      conf_threshold: params.conf_threshold,
+      iou_threshold: params.iou_threshold,
+      imgsz: params.imgsz,
+    })
+    batchProgress.value = { done: res.total_items, total: files.length }
+    recentBatch.value = res.task_ids.slice(0, 6).map((id) => ({ taskId: id, count: 0 }))
+    ElMessage.success(`批量识别完成：${res.total_items} 个任务`)
+    if (res.status === 'partial') {
+      ElMessage.warning('部分图片识别失败，详见后端日志')
+    }
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '批量识别失败')
+  } finally {
+    loading.value = false
+    batchProgress.value = null
+  }
+}
+
 function onSelectDetection(d: Detection) {
   selected.value = d
 }
@@ -62,7 +89,26 @@ function onSelectDetection(d: Detection) {
     <div class="grid">
       <section class="panel">
         <h3>上传</h3>
-        <UploadDrop :disabled="loading" @select="onFile" />
+        <UploadDrop
+          :disabled="loading"
+          :multiple="true"
+          @select="onFile"
+          @select-many="onBatch"
+        />
+
+        <div v-if="batchProgress" class="batch-progress">
+          <el-progress
+            :percentage="Math.round((batchProgress.done / batchProgress.total) * 100)"
+            :stroke-width="8"
+          />
+          <div class="batch-text">{{ batchProgress.done }} / {{ batchProgress.total }}</div>
+        </div>
+        <div v-if="recentBatch.length" class="recent-batch">
+          <div class="sub">最近批量任务：</div>
+          <el-tag v-for="t in recentBatch" :key="t.taskId" size="small" class="tag">
+            #{{ t.taskId }}
+          </el-tag>
+        </div>
 
         <div class="params">
           <div class="field">
@@ -169,6 +215,29 @@ function onSelectDetection(d: Detection) {
   font-size: 12px;
   color: var(--vf-ink-muted);
   margin-bottom: 4px;
+}
+.batch-progress {
+  margin-top: 12px;
+}
+.batch-text {
+  font-size: 11px;
+  color: var(--vf-ink-muted);
+  margin-top: 4px;
+  text-align: center;
+}
+.recent-batch {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.recent-batch .sub {
+  font-size: 11px;
+  color: var(--vf-ink-muted);
+}
+.recent-batch .tag {
+  cursor: default;
 }
 .result-header {
   display: flex;

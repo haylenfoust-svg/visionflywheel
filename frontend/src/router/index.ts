@@ -39,6 +39,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/Dataset.vue'),
         meta: { title: '数据与权重' },
       },
+      {
+        path: 'chat',
+        name: 'chat',
+        component: () => import('@/views/Chat.vue'),
+        meta: { title: '智能分析' },
+      },
+      {
+        path: 'admin',
+        name: 'admin',
+        component: () => import('@/views/Admin.vue'),
+        meta: { title: '系统管理', adminOnly: true },
+      },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
@@ -56,6 +68,9 @@ router.beforeEach((to) => {
   }
   if (!auth.isLoggedIn) {
     return { name: 'login', query: { redirect: to.fullPath } }
+  }
+  if (to.meta.adminOnly && !auth.isAdmin) {
+    return { name: 'dashboard' }
   }
   return true
 })
