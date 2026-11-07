@@ -12,6 +12,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AiInsightCard: typeof import('./components/AiInsightCard.vue')['default']
     AppCard: typeof import('./components/AppCard.vue')['default']
     BarChart: typeof import('./components/BarChart.vue')['default']
     DataTable: typeof import('./components/DataTable.vue')['default']
@@ -59,6 +60,7 @@ declare module 'vue' {
 
 // For TSX support
 declare global {
+  const AiInsightCard: typeof import('./components/AiInsightCard.vue')['default']
   const AppCard: typeof import('./components/AppCard.vue')['default']
   const BarChart: typeof import('./components/BarChart.vue')['default']
   const DataTable: typeof import('./components/DataTable.vue')['default']

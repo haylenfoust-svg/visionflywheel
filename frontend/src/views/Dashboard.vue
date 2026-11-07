@@ -29,6 +29,39 @@ const quality = ref<QualityMetrics | null>(null)
 const loading = ref(true)
 const range = ref<'7d' | '14d' | '30d'>('14d')
 
+// Quality health = 100 - (fp_rate*100 + miss_rate*100) normalized
+const qualityHealth = computed(() => {
+  if (!quality.value) return 0
+  const fp = quality.value.rates.false_positive_rate
+  const miss = quality.value.rates.miss_rate_proxy
+  const score = Math.max(0, 100 - (fp + miss) * 100)
+  return Math.round(score)
+})
+
+// Todo quick-jumps (UI改进3)
+const todos = computed(() => {
+  const t = stats.value?.totals
+  if (!t) return []
+  const items: Array<{ label: string; count: number; icon: string; path: string; tone: string }> = []
+  if ((stats.value?.by_status?.pending ?? 0) > 0) {
+    items.push({
+      label: '待校正检测',
+      count: stats.value?.by_status?.pending ?? 0,
+      icon: '✎',
+      path: '/annotate',
+      tone: 'warning',
+    })
+  }
+  if (t.open_tickets > 0) {
+    items.push({ label: '待处理工单', count: t.open_tickets, icon: '⚑', path: '/admin', tone: 'danger' })
+  }
+  if (t.datasets === 0 && (t.corrections ?? 0) > 0) {
+    items.push({ label: '可导出训练集', count: 1, icon: '◈', path: '/dataset', tone: 'primary' })
+  }
+  return items
+})
+
+
 const displayName = computed(() => auth.user?.display_name || auth.user?.username || '')
 const isYolo = computed(() => (health.value?.detector_mode ?? '') === 'yolo')
 
@@ -268,6 +301,29 @@ onMounted(refresh)
       />
     </div>
 
+      <!-- 待办事项 -->
+      <AppCard v-if="todos.length" hoverable class="todo-card">
+        <template #header>
+          <SectionHeader title="待办事项" description="需要你处理" />
+        </template>
+        <div class="todo-list">
+          <button
+            v-for="todo in todos"
+            :key="todo.label"
+            class="todo-item"
+            :class="'tone-' + todo.tone"
+            @click="go(todo.path)"
+          >
+            <span class="todo-item__icon">{{ todo.icon }}</span>
+            <div class="todo-item__body">
+              <div class="todo-item__label">{{ todo.label }}</div>
+              <div class="todo-item__count num">{{ todo.count }}</div>
+            </div>
+            <span class="todo-item__arrow">→</span>
+          </button>
+        </div>
+      </AppCard>
+
     <!-- 主图表区 -->
     <template v-if="stats">
       <div class="main-grid">
@@ -468,6 +524,30 @@ onMounted(refresh)
               :width="120"
               :height="28"
             />
+          </div>
+          <div class="quality-metric ring">
+            <div class="quality-metric__label">飞轮健康度</div>
+            <div class="quality-ring">
+              <svg viewBox="0 0 36 36" class="quality-ring__svg">
+                <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--bg-subtle)" stroke-width="3" />
+                <circle
+                  cx="18"
+                  cy="18"
+                  r="15.5"
+                  fill="none"
+                  :stroke="qualityHealth >= 75 ? 'var(--c-success-500)' : qualityHealth >= 45 ? 'var(--c-warning-500)' : 'var(--c-danger-500)'"
+                  stroke-width="3"
+                  stroke-linecap="round"
+                  :stroke-dasharray="`${(qualityHealth / 100) * 97.4} 97.4`"
+                  transform="rotate(-90 18 18)"
+                />
+              </svg>
+              <div class="quality-ring__label">
+                <div class="num">{{ qualityHealth }}%</div>
+                <div class="ring-sub">健康度</div>
+              </div>
+            </div>
+            <div class="quality-metric__sub">基于误检率/补检率/校正率综合</div>
           </div>
           <div class="quality-metric">
             <div class="quality-metric__label">近 7 天检测</div>
@@ -826,6 +906,97 @@ onMounted(refresh)
   color: var(--text-tertiary);
   margin-bottom: var(--sp-2);
 }
+.quality-ring {
+  position: relative;
+  width: 72px;
+  height: 72px;
+}
+.quality-ring__svg {
+  width: 100%;
+  height: 100%;
+}
+.quality-ring__label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.quality-ring__label .num {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+}
+.quality-ring__label .ring-sub {
+  font-size: 9px;
+  color: var(--text-tertiary);
+}
+.quality-metric.ring {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.todo-card {
+  margin-bottom: var(--sp-3);
+}
+.todo-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-2);
+}
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-subtle);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--t-fast) var(--ease-standard);
+}
+.todo-item:hover {
+  background: var(--bg-surface);
+  border-color: var(--border-accent);
+  transform: translateX(2px);
+}
+.todo-item.tone-warning { border-left: 3px solid var(--c-warning-500); }
+.todo-item.tone-danger { border-left: 3px solid var(--c-danger-500); }
+.todo-item.tone-primary { border-left: 3px solid var(--c-primary-500); }
+.todo-item__icon {
+  width: 32px; height: 32px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-md);
+  flex-shrink: 0;
+}
+.todo-item__body {
+  flex: 1;
+}
+.todo-item__label {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+}
+.todo-item__count {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+}
+.todo-item__arrow {
+  color: var(--text-disabled);
+  transition: transform var(--t-fast) var(--ease-standard);
+}
+.todo-item:hover .todo-item__arrow {
+  transform: translateX(3px);
+  color: var(--text-accent);
+}
+
 .quality-delta {
   font-size: var(--fs-sm);
   padding: 1px var(--sp-2);

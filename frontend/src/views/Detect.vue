@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 
 import { batchUpload, uploadAndDetect } from '@/api/tasks'
 import AppCard from '@/components/AppCard.vue'
+import AiInsightCard from '@/components/AiInsightCard.vue'
 import DetectionTable from '@/components/DetectionTable.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
@@ -26,6 +27,43 @@ const selected = ref<Detection | null>(null)
 const previewUrl = ref<string>('')
 const batchProgress = ref<{ done: number; total: number } | null>(null)
 const recentBatch = ref<Array<{ taskId: number }>>([])
+
+const avgConfidence = computed(() => {
+  if (!result.value?.detections?.length) return null
+  const total = result.value.detections.reduce((s, d) => s + d.confidence, 0)
+  return total / result.value.detections.length
+})
+
+const confRange = computed(() => {
+  const dets = result.value?.detections ?? []
+  if (!dets.length) return null
+  const confs = dets.map((d) => d.confidence)
+  return {
+    min: Math.min(...confs),
+    max: Math.max(...confs),
+    suggested: avgConfidence.value ?? 0,
+  }
+})
+
+const aiRationale = computed(() => {
+  const dets = result.value?.detections ?? []
+  if (!dets.length) return '未检测到目标。可以尝试调低置信度阈值或换一张图片。'
+  const byClass = dets.reduce<Record<string, number>>((acc, d) => {
+    const k = d.class_name_zh || d.class_name
+    acc[k] = (acc[k] ?? 0) + 1
+    return acc
+  }, {})
+  const top = Object.entries(byClass).sort((a, b) => b[1] - a[1])[0]
+  return `主要类别为「${top[0]}」，共 ${top[1]} 个目标。平均置信度 ${((avgConfidence.value ?? 0) * 100).toFixed(1)}%，${dets.length >= 5 ? '目标较多，建议逐个校正。' : '数量较少，可直接进入校正工作台。'}`
+})
+
+const aiSources = computed(() => {
+  const s: Array<{ label: string; type?: 'model' | 'rule' | 'kb' }> = []
+  if (result.value?.detector_mode === 'yolo') s.push({ label: 'YOLO', type: 'model' })
+  else s.push({ label: '降级检测器', type: 'rule' })
+  s.push({ label: '实时推理', type: 'model' })
+  return s
+})
 
 const detectorTag = computed(() => {
   const mode = result.value?.detector_mode
@@ -249,6 +287,18 @@ v-if="can('task.write')" :disabled="loading"
               <img v-if="previewUrl" :src="previewUrl" alt="识别结果" class="preview__img" />
               <div v-else class="preview__empty">无结果图</div>
             </div>
+
+            <!-- AI 智能分析卡 -->
+            <AiInsightCard
+              title="AI 识别分析"
+              :headline="`${result.detections.length} 个目标`"
+              headline-sub="基于 YOLO 检测结果"
+              :confidence="avgConfidence"
+              :range="confRange"
+              :rationale="aiRationale"
+              :sources="aiSources"
+              tone="primary"
+            />
 
             <!-- 类别分布 -->
             <div v-if="classDistribution.length" class="class-dist">

@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { createFeedback, createCorrection, listAudit, listFeedback, replyFeedback, undo, updateFeedbackStatus } from '@/api/corrections'
 import { getTaskDetections, listTasks, uploadAndDetect } from '@/api/tasks'
+import AiInsightCard from '@/components/AiInsightCard.vue'
 import AppCard from '@/components/AppCard.vue'
 import DetectionTable from '@/components/DetectionTable.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -239,6 +240,57 @@ async function onStatusChange(ticket: Feedback, status: string) {
   await refreshTickets()
 }
 
+// ---- AI-suggested labels (P3.2 / UI改进2) ----
+const suggestedLabels = computed(() => {
+  // Suggest labels based on current detections and history
+  const counts = new Map<string, number>()
+  for (const d of detections.value) {
+    const key = d.class_name_zh || d.class_name
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  const auditLabels = auditRows.value
+    .filter((r) => r.action === 'relabel' && r.new_value)
+    .map((r) => {
+      try {
+        const parsed = JSON.parse(r.new_value!)
+        return parsed.class_name as string
+      } catch {
+        return null
+      }
+    })
+    .filter((s): s is string => Boolean(s))
+
+  const suggestions = new Set<string>()
+  for (const k of counts.keys()) suggestions.add(k)
+  for (const k of auditLabels) suggestions.add(k)
+  // Common detection labels as fallback
+  for (const k of ['缺陷', '划痕', '污渍', '裂纹', '异物']) suggestions.add(k)
+  return Array.from(suggestions).slice(0, 12)
+})
+
+function applySuggestion(label: string) {
+  relabelForm.newClass = label
+  relabelDialog.value = true
+}
+
+const avgDetectionConfidence = computed(() => {
+  if (!detections.value.length) return null
+  return detections.value.reduce((s, d) => s + d.confidence, 0) / detections.value.length
+})
+
+const aiCorrectionRationale = computed(() => {
+  const pending = detections.value.filter((d) => d.status === 'pending').length
+  const corrected = detections.value.filter((d) => d.status === 'corrected').length
+  const rejected = detections.value.filter((d) => d.status === 'rejected').length
+  if (pending === 0) return '所有检测都已校正完成，可以进入「数据与权重」导出训练集。'
+  return `还有 ${pending} 个待校正。已完成 ${corrected} 个校正、${rejected} 个否决。点击框可选中，工具栏可执行五种校正动作。`
+})
+
+const aiCorrectionSources = computed(() => [
+  { label: '实时推理', type: 'model' as const },
+  { label: '校正历史', type: 'kb' as const },
+])
+
 const statCards = computed(() => {
   const counts = detections.value.reduce<Record<string, number>>((acc, d) => {
     acc[d.status] = (acc[d.status] ?? 0) + 1
@@ -342,6 +394,18 @@ v-if="can('detection.correct')" type="warning" plain size="large" :loading="undo
     <el-tabs v-model="activeTab" class="tabs">
       <el-tab-pane label="标注" name="annotate">
         <div class="workbench">
+          <!-- AI 智能分析卡 -->
+          <AiInsightCard
+            v-if="detections.length"
+            title="AI 校正建议"
+            :headline="`${detections.length} 个目标`"
+            :headline-sub="`待校正 ${statCards[0]?.value ?? 0} · 已校正 ${statCards[1]?.value ?? 0}`"
+            :confidence="avgDetectionConfidence"
+            :rationale="aiCorrectionRationale"
+            :sources="aiCorrectionSources"
+            tone="success"
+          />
+
           <!-- Canvas -->
           <section class="canvas-panel">
             <UploadDrop v-if="!currentTaskId" :disabled="loading" @select="onUpload" />
@@ -495,6 +559,21 @@ v-if="can('detection.correct')" type="warning" plain size="large" :loading="undo
       <div class="dialog-form">
         <label class="dialog-label">新类别名</label>
         <el-input v-model="relabelForm.newClass" placeholder="输入中文或英文类别" size="large" />
+      <div class="suggest-labels">
+        <div class="suggest-labels__title">AI 建议标签</div>
+        <div class="suggest-labels__list">
+          <el-tag
+            v-for="s in suggestedLabels"
+            :key="s"
+            size="small"
+            class="suggest-tag"
+            :class="{ 'is-active': relabelForm.newClass === s }"
+            @click="applySuggestion(s)"
+          >
+            {{ s }}
+          </el-tag>
+        </div>
+      </div>
         <p class="dialog-hint">修改后会写入审计流水，可随时撤销。</p>
       </div>
       <template #footer>
@@ -699,6 +778,30 @@ kbd {
   font-size: var(--fs-sm);
   font-weight: var(--fw-medium);
   color: var(--text-secondary);
+}
+.suggest-labels {
+  margin-top: var(--sp-3);
+}
+.suggest-labels__title {
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+  margin-bottom: var(--sp-2);
+}
+.suggest-labels__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+.suggest-tag {
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease-standard);
+}
+.suggest-tag:hover {
+  transform: translateY(-1px);
+}
+.suggest-tag.is-active {
+  background: var(--c-primary-600);
+  color: white;
 }
 .dialog-hint {
   margin: 0;
