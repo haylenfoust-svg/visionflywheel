@@ -18,6 +18,7 @@ from app.schemas.config import (
     SystemInfoOut,
 )
 from app.services.config_service import get_config_service
+from app.services.permission_service import require_permission
 
 router = APIRouter(tags=["system"], route_class=EnvelopeRoute)
 
@@ -41,7 +42,7 @@ def health(db: Session = Depends(get_db)) -> HealthOut:
 
 
 @router.get("/system/info", response_model=SystemInfoOut)
-def info(user: CurrentUser, db: Session = Depends(get_db)) -> SystemInfoOut:
+def info(user: CurrentUser, db: Session = Depends(get_db), _perm: object = Depends(require_permission("config.read"))) -> SystemInfoOut:
     settings = get_settings()
     cfg = get_config_service()
     weight_id = cfg.get(db, "default_weight_id")
@@ -57,7 +58,7 @@ def info(user: CurrentUser, db: Session = Depends(get_db)) -> SystemInfoOut:
 
 
 @router.get("/config", response_model=ConfigMapOut)
-def read_config(_: CurrentUser, db: Session = Depends(get_db)) -> ConfigMapOut:
+def read_config(_u: CurrentUser, db: Session = Depends(get_db), _perm: object = Depends(require_permission("config.read"))) -> ConfigMapOut:
     snapshot = get_config_service().snapshot(db)
     values = {k: ConfigValueOut(**v) for k, v in snapshot.items()}
     return ConfigMapOut(values=values)

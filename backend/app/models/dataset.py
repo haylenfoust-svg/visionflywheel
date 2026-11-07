@@ -32,6 +32,9 @@ class DatasetExport(TimestampMixin, Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Scope for data isolation (B端-数据隔离)
+    org_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+    team_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
 
     def __repr__(self) -> str:
         return f"<DatasetExport {self.dataset_version} status={self.status}>"

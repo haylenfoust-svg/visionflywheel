@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import AdminUser, CurrentUser
+from app.core.deps import CurrentUser
 from app.core.envelope import EnvelopeRoute
 from app.core.exceptions import AppError, Err
 from app.schemas.common import Page
@@ -20,6 +20,7 @@ from app.schemas.correction import (
     UndoRequest,
 )
 from app.services import correction_service, feedback_service
+from app.services.permission_service import require_permission
 
 router = APIRouter(tags=["corrections"], route_class=EnvelopeRoute)
 
@@ -30,6 +31,7 @@ def create_correction(
     payload: CorrectionCreate,
     user: CurrentUser,
     db: Session = Depends(get_db),
+    _perm: object = Depends(require_permission("detection.correct")),
 ) -> CorrectionResult:
     try:
         row = correction_service.apply_correction(db, payload, operator=user.username)
@@ -57,6 +59,7 @@ def create_batch(
     payload: CorrectionBatchRequest,
     user: CurrentUser,
     db: Session = Depends(get_db),
+    _perm: object = Depends(require_permission("detection.correct")),
 ) -> list[CorrectionResult]:
     from app.schemas.correction import CorrectionCreate
 
@@ -96,6 +99,7 @@ def undo(
     payload: UndoRequest,
     user: CurrentUser,
     db: Session = Depends(get_db),
+    _perm: object = Depends(require_permission("detection.correct")),
 ) -> CorrectionResult:
     row = correction_service.undo_correction(
         db, target_id=payload.correction_id, operator=user.username
@@ -123,6 +127,7 @@ def audit(
     operator: str | None = Query(default=None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
+    _perm: object = Depends(require_permission("audit.read")),
 ) -> Page[CorrectionOut]:
     payload = correction_service.list_corrections(
         db,
@@ -161,6 +166,7 @@ def create_feedback(
     payload: FeedbackCreate,
     user: CurrentUser,
     db: Session = Depends(get_db),
+    _perm: object = Depends(require_permission("feedback.write")),
 ) -> FeedbackOut:
     ticket = feedback_service.create_ticket(
         db,
@@ -181,6 +187,7 @@ def list_feedback(
     mine: bool = Query(default=False),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
+    _perm: object = Depends(require_permission("feedback.read")),
 ) -> Page[FeedbackOut]:
     payload = feedback_service.list_tickets(
         db,
@@ -203,8 +210,9 @@ def list_feedback(
 def reply_feedback(
     ticket_id: int,
     payload: FeedbackReply,
-    admin: AdminUser,
+    admin: CurrentUser,
     db: Session = Depends(get_db),
+    _perm: object = Depends(require_permission("feedback.manage")),
 ) -> FeedbackOut:
     ticket = feedback_service.reply(db, ticket_id, reply_text=payload.reply, admin_username=admin.username)
     return FeedbackOut.model_validate(ticket)
@@ -214,8 +222,9 @@ def reply_feedback(
 def update_feedback_status(
     ticket_id: int,
     payload: FeedbackStatusUpdate,
-    admin: AdminUser,
+    admin: CurrentUser,
     db: Session = Depends(get_db),
+    _perm: object = Depends(require_permission("feedback.manage")),
 ) -> FeedbackOut:
     ticket = feedback_service.update_status(db, ticket_id, payload.status, admin_username=admin.username)
     return FeedbackOut.model_validate(ticket)

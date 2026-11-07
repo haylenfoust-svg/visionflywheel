@@ -16,6 +16,11 @@ class Task(TimestampMixin, Base):
 
     created_by: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
 
+    # Scope for data isolation (B端-数据隔离). NULL means "unscoped" — visible
+    # to any user with any scope. admin / system.admin sees everything.
+    org_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+    team_id: Mapped[int | None] = mapped_column(Integer, index=True, nullable=True)
+
     # Inference parameters captured at run time (PRD FR-2.4)
     conf_threshold: Mapped[float] = mapped_column(Float, default=0.5, nullable=False)
     iou_threshold: Mapped[float] = mapped_column(Float, default=0.45, nullable=False)

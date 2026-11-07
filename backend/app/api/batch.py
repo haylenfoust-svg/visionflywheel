@@ -13,6 +13,7 @@ from app.core.envelope import EnvelopeRoute
 from app.core.exceptions import AppError, Err
 from app.schemas.detection import BatchUploadResult, DetectParams
 from app.services import task_service
+from app.services.permission_service import require_permission
 from app.utils.files import validate_image_name, validate_image_size
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ MAX_BATCH_FILES = 50  # PRD FR-2.2
 async def batch_upload(
     user: CurrentUser,
     db: Session = Depends(get_db),
+    _perm: object = Depends(require_permission("task.write")),
     files: list[UploadFile] = File(...),
     conf_threshold: float | None = Form(default=None),
     iou_threshold: float | None = Form(default=None),

@@ -108,6 +108,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
         "dataset.read",
         "weight.read",
         "train.read",
+        "config.read",
         "chat.use",
         "chat.knowledge.write",
     ],

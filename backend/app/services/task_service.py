@@ -41,6 +41,8 @@ def run_image_task(
     filename: str,
     username: str | None,
     params: DetectParams | None = None,
+    org_id: int | None = None,
+    team_id: int | None = None,
 ) -> dict:
     """Full loop for one image. Raises ValueError on invalid input."""
     validate_image_name(filename)
@@ -53,6 +55,8 @@ def run_image_task(
         type="image",
         status="running",
         created_by=username,
+        org_id=org_id,
+        team_id=team_id,
         conf_threshold=conf,
         iou_threshold=iou,
         imgsz=imgsz,
@@ -170,16 +174,20 @@ def get_detections(db: Session, task_id: int) -> list[Detection]:
     return db.query(Detection).filter(Detection.task_id == task_id).order_by(Detection.id).all()
 
 
-def detection_stats(db: Session) -> dict:
+def detection_stats(db: Session, *, task_ids_subquery=None) -> dict:
     from sqlalchemy import func
 
-    total = db.query(func.count(Detection.id)).scalar() or 0
+    det_q = db.query(Detection)
+    if task_ids_subquery is not None:
+        det_q = det_q.filter(Detection.task_id.in_(task_ids_subquery))
 
-    by_status_rows = db.query(Detection.status, func.count(Detection.id)).group_by(Detection.status).all()
+    total = det_q.with_entities(func.count(Detection.id)).scalar() or 0
+
+    by_status_rows = det_q.with_entities(Detection.status, func.count(Detection.id)).group_by(Detection.status).all()
     by_status = dict(by_status_rows)
 
     by_class_rows = (
-        db.query(Detection.class_name, Detection.class_name_zh, func.count(Detection.id))
+        det_q.with_entities(Detection.class_name, Detection.class_name_zh, func.count(Detection.id))
         .group_by(Detection.class_name, Detection.class_name_zh)
         .order_by(func.count(Detection.id).desc())
         .all()
@@ -190,17 +198,17 @@ def detection_stats(db: Session) -> dict:
     ]
 
     today = {
-        "detected": db.query(func.count(Detection.id))
+        "detected": det_q.with_entities(func.count(Detection.id))
         .filter(func.date(Detection.created_at) == func.date(func.now()))
         .scalar()
         or 0,
-        "corrected": db.query(func.count(Detection.id))
+        "corrected": det_q.with_entities(func.count(Detection.id))
         .filter(func.date(Detection.created_at) == func.date(func.now()), Detection.status == "corrected")
         .scalar()
         or 0,
     }
 
-    avg_conf = db.query(func.avg(Detection.confidence)).scalar() or 0.0
+    avg_conf = det_q.with_entities(func.avg(Detection.confidence)).scalar() or 0.0
 
     return {
         "total": total,

@@ -27,6 +27,7 @@ from app.schemas.dataset import (
     WeightOut,
 )
 from app.services import dataset_exporter, train_service, weight_manager
+from app.services.permission_service import require_permission
 
 router = APIRouter(tags=["dataset"], route_class=EnvelopeRoute)
 
@@ -118,15 +119,16 @@ def dataset_download(dataset_version: str, _: AdminUser, db: Session = Depends(g
 
 # ---------- Weights ----------
 @router.get("/weights", response_model=list[WeightOut])
-def weights_list(user: CurrentUser, db: Session = Depends(get_db)) -> list[WeightOut]:
+def weights_list(user: CurrentUser, db: Session = Depends(get_db), _perm: object = Depends(require_permission("weight.read"))) -> list[WeightOut]:
     weight_manager.scan_weights_dir(db)
     return [WeightOut.model_validate(w) for w in weight_manager.list_weights(db)]
 
 
 @router.post("/weights/upload", response_model=WeightOut, status_code=201)
 def weights_upload(
-    admin: AdminUser,
+    admin: CurrentUser,
     db: Session = Depends(get_db),
+    _perm: object = Depends(require_permission("weight.write")),
     file: UploadFile = File(...),
     note: str | None = None,
 ) -> WeightOut:
@@ -138,23 +140,23 @@ def weights_upload(
 
 
 @router.get("/weights/{weight_id}", response_model=WeightOut)
-def weights_detail(weight_id: int, user: CurrentUser, db: Session = Depends(get_db)) -> WeightOut:
+def weights_detail(weight_id: int, user: CurrentUser, db: Session = Depends(get_db), _perm: object = Depends(require_permission("weight.read"))) -> WeightOut:
     return WeightOut.model_validate(weight_manager.get_weight(db, weight_id))
 
 
 @router.put("/weights/{weight_id}/default", response_model=WeightHotSwapOut)
-def weights_set_default(weight_id: int, admin: AdminUser, db: Session = Depends(get_db)) -> WeightHotSwapOut:
+def weights_set_default(weight_id: int, admin: CurrentUser, db: Session = Depends(get_db), _perm: object = Depends(require_permission("weight.switch"))) -> WeightHotSwapOut:
     return WeightHotSwapOut(**weight_manager.set_default(db, weight_id, operator=admin.username))
 
 
 @router.delete("/weights/{weight_id}", status_code=204)
-def weights_delete(weight_id: int, admin: AdminUser, db: Session = Depends(get_db)) -> None:
+def weights_delete(weight_id: int, admin: CurrentUser, db: Session = Depends(get_db), _perm: object = Depends(require_permission("weight.delete"))) -> None:
     weight_manager.delete_weight(db, weight_id)
 
 
 # ---------- Training ----------
 @router.post("/train", response_model=TrainRunOut, status_code=202)
-def train_start(payload: TrainRequest, admin: AdminUser, db: Session = Depends(get_db)) -> TrainRunOut:
+def train_start(payload: TrainRequest, admin: CurrentUser, db: Session = Depends(get_db), _perm: object = Depends(require_permission("train.write"))) -> TrainRunOut:
     run = train_service.create_training(
         db,
         dataset_version=payload.dataset_version,
@@ -170,8 +172,9 @@ def train_start(payload: TrainRequest, admin: AdminUser, db: Session = Depends(g
 
 @router.get("/train", response_model=Page[TrainRunOut])
 def train_list(
-    _: AdminUser,
+    _u: CurrentUser,
     db: Session = Depends(get_db),
+    _perm: object = Depends(require_permission("train.read")),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
 ) -> Page[TrainRunOut]:
@@ -186,10 +189,10 @@ def train_list(
 
 
 @router.get("/train/{run_id}", response_model=TrainRunDetail)
-def train_detail(run_id: int, _: AdminUser, db: Session = Depends(get_db)) -> TrainRunDetail:
+def train_detail(run_id: int, _u: CurrentUser, db: Session = Depends(get_db), _perm: object = Depends(require_permission("train.read"))) -> TrainRunDetail:
     return TrainRunDetail.model_validate(train_service.get_run(db, run_id))
 
 
 @router.post("/train/{run_id}/cancel", response_model=TrainRunOut)
-def train_cancel(run_id: int, admin: AdminUser, db: Session = Depends(get_db)) -> TrainRunOut:
+def train_cancel(run_id: int, admin: CurrentUser, db: Session = Depends(get_db), _perm: object = Depends(require_permission("train.write"))) -> TrainRunOut:
     return TrainRunOut.model_validate(train_service.cancel_run(db, run_id))

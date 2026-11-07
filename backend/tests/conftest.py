@@ -77,6 +77,26 @@ def client(engine, db_session):
         )
         db_session.commit()
 
+        # Seed RBAC catalog and give the tester user the `operator` role so
+        # non-admin tests exercise the real permission matrix (B端-1).
+        from app.services.auth_service import seed_permissions_and_roles
+
+        seed_permissions_and_roles(db_session)
+        from app.models.rbac import Role, UserRole
+
+        operator_role = db_session.query(Role).filter(Role.code == "operator").first()
+        tester_user = db_session.query(User).filter(User.username == TEST_USERNAME).first()
+        if operator_role is not None and tester_user is not None:
+            db_session.add(
+                UserRole(
+                    user_id=tester_user.id,
+                    role_id=operator_role.id,
+                    scope_type="global",
+                    scope_id=None,
+                )
+            )
+            db_session.commit()
+
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()

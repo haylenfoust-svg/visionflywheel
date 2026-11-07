@@ -12,17 +12,18 @@ from app.models.user import User
 from app.schemas.auth import UserOut
 from app.schemas.config import AuditOut
 from app.services import stats_service
+from app.services.permission_service import require_permission
 
 router = APIRouter(tags=["stats"], route_class=EnvelopeRoute)
 
 
 @router.get("/stats/overview")
-def overview(user: CurrentUser, db: Session = Depends(get_db)) -> dict:
+def overview(user: CurrentUser, db: Session = Depends(get_db), _perm: object = Depends(require_permission("task.read"))) -> dict:
     return stats_service.dashboard_overview(db)
 
 
 @router.get("/stats/health-detail")
-def health_detail(user: CurrentUser, db: Session = Depends(get_db)) -> dict:
+def health_detail(user: CurrentUser, db: Session = Depends(get_db), _perm: object = Depends(require_permission("system.admin"))) -> dict:
     """Richer health info for the admin panel."""
     from app.core.config import get_settings
     from app.services.detector_factory import detector_mode, get_detector
